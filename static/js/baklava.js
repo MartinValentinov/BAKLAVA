@@ -37,7 +37,6 @@ let sceneIsOpen = false;
 let catalogueMode = null;
 let noticeTimer = null;
 
-
 function notify(message, kind = "success", autoHide = true) {
     clearTimeout(noticeTimer);
 
@@ -82,7 +81,6 @@ function hideProcessingOverlay() {
     processingOverlay.classList.add("is-hidden");
 }
 
-
 function openSidebar() {
     sidebar.classList.add("is-open");
     sidebarBackdrop.classList.remove("is-hidden");
@@ -92,7 +90,6 @@ function closeSidebar() {
     sidebar.classList.remove("is-open");
     sidebarBackdrop.classList.add("is-hidden");
 }
-
 
 function setButtonsLocked(locked) {
     sceneIsOpen = locked;
@@ -125,7 +122,6 @@ function showDetails() {
 
     setButtonsLocked(true);
 }
-
 
 function renderCatalogue(names, mode) {
     catalogueMode = mode;
@@ -292,7 +288,6 @@ function renderShipScene(scene) {
     reportText.value = lines.join("\n");
 }
 
-
 function initMap() {
     map = L.map("map").setView(
         [BAKLAVA_SETTINGS.map_default_lat, BAKLAVA_SETTINGS.map_default_lon],
@@ -369,7 +364,6 @@ function focusOn(lat, lon, zoom = 8) {
     map.setView([lat, lon], zoom);
 }
 
-
 btnRequest.addEventListener("click", () => {
     if (sceneIsOpen) {
         return;
@@ -412,7 +406,6 @@ document.addEventListener("keydown", (event) => {
 });
 
 notice.addEventListener("click", hideNotice);
-
 
 initMap();
 

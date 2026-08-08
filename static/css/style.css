@@ -1,89 +1,43 @@
-/* ============================================================================
-   BAKLAVA - base stylesheet (1 of 2)
-   ============================================================================
-   This file controls how everything LOOKS: colours, sizes, spacing, animations.
-
-   There is a SECOND stylesheet, static/css/ui.css, loaded right after this one.
-   It holds the finished components (the two pill buttons and the notification
-   strip). Because it is loaded second, its rules win where they overlap. So:
-
-       want a different colour or size in general?  -> this file, :root below
-       want the buttons or the notification tweaked? -> ui.css
-
-   START HERE: the ":root" block below. Every colour and size used anywhere is
-   defined once there as a "variable" (the names starting with --).
-   Change a value there and it updates everywhere on the page - in ui.css too.
-
-   Further down, each section is labelled with the block it styles, in the same
-   order as index.html.
-   ========================================================================= */
-
-
-/* ============================================================================
-   SECTION 0 - THE VARIABLES (change these first)
-   ========================================================================= */
 :root {
-    /* --- THE THREE BRAND COLOURS ----------------------------------------- */
-    --color-accent: #FFD29D;  /* the two pill buttons, hover, selection        */
-    --color-dark:   #1F271B;  /* not-loaded and not-available things           */
-    --color-sar:    #918450;  /* the SAR Scene Catalogue panel                 */
 
-    /* A slightly deeper shade of the accent, used for button hover/press so
-       the buttons react without changing their character. */
+    --color-accent: #FFD29D;
+    --color-dark:   #1F271B;
+    --color-sar:    #918450;
+
     --color-accent-deep: #F7BE7E;
 
-    /* --- SUPPORTING COLOURS ---------------------------------------------- */
-    --color-page-bg: #F3F3F1;  /* the page background            */
-    --color-surface: #FFFFFF;  /* the inside of white boxes      */
+    --color-page-bg: #F3F3F1;
+    --color-surface: #FFFFFF;
 
-    /* A very light version of --color-sar. Used for the report box inside the
-       green panel, where plain white was too harsh a contrast. Make it darker
-       for more colour, lighter for less - it is the same hue either way. */
     --color-surface-soft: #EFEDE3;
-    --color-ink:     #1F271B;  /* main text (same as --color-dark) */
-    --color-muted:   #6B7280;  /* secondary text, hints          */
-    --color-on-dark: #F3F3F1;  /* text written on a dark surface */
-    --color-alert:   #D0342C;  /* dark vessels, warnings         */
+    --color-ink:     #1F271B;
+    --color-muted:   #6B7280;
+    --color-on-dark: #F3F3F1;
+    --color-alert:   #D0342C;
 
-    /* --- NOTIFICATION COLOURS (the strip next to the buttons) -------------
-       Each state has a text colour, a pale background and a matching border. */
     --ok-ink:     #256D40;  --ok-bg:     #EDF7EE;  --ok-line:     #BFE3C6;
     --err-ink:    #9B2620;  --err-bg:    #FBECEB;  --err-line:    #F0C3C0;
     --info-ink:   #7A5A21;  --info-bg:   #FDF3E4;  --info-line:   #F3DCBB;
     --wait-ink:   #4B5563;  --wait-bg:   #F1F1EF;  --wait-line:   #DCDCD7;
 
-    /* --- TYPEFACES -------------------------------------------------------
-       The families listed after the first one are fallbacks, used if the
-       first is unavailable. Fonts are loaded in index.html <head>. */
-    --font-display: "Space Grotesk", "Segoe UI", sans-serif;  /* titles, buttons */
-    --font-body:    "IBM Plex Sans", "Segoe UI", sans-serif;  /* normal text */
-    --font-mono:    "IBM Plex Mono", Consolas, monospace;     /* report, numbers */
+    --font-display: "Space Grotesk", "Segoe UI", sans-serif;
+    --font-body:    "IBM Plex Sans", "Segoe UI", sans-serif;
+    --font-mono:    "IBM Plex Mono", Consolas, monospace;
 
-    /* --- SHAPES AND SPACING ---------------------------------------------- */
-    --radius-panel: 18px;   /* the two big panels and the popup */
-    --radius-item:  10px;   /* rows inside the catalogue                */
-    --radius-pill:  999px;  /* a value this large always makes a capsule */
-    --gap:          22px;   /* standard space between elements           */
-    --page-pad:     26px;   /* left/right margin of the whole page       */
+    --radius-panel: 18px;
+    --radius-item:  10px;
+    --radius-pill:  999px;
+    --gap:          22px;
+    --page-pad:     26px;
 
-    /* --- ANIMATION SPEEDS ------------------------------------------------
-       "ms" = milliseconds. 250ms is a quarter of a second. */
-    --speed-slide: 380ms;   /* sidebar sliding in from the right */
-    --speed-fade:  200ms;   /* general fade / colour change      */
+    --speed-slide: 380ms;
+    --speed-fade:  200ms;
 
-    /* --- LAYOUT SIZES ----------------------------------------------------- */
-    --sidebar-width: 320px;  /* width of the sliding sidebar    */
-    --panel-height:  480px;  /* height of the two big panels    */
-    --logo-size:      66px;  /* HEIGHT of the logo in the top-left corner;
-                                its width follows the logo's own shape */
+    --sidebar-width: 320px;
+    --panel-height:  640px;
+    --logo-size:      96px;
 }
 
-
-/* ============================================================================
-   SECTION 1 - PAGE BASICS
-   ========================================================================= */
-
-/* "*" means "every element". This makes width calculations behave sensibly. */
 * {
     box-sizing: border-box;
 }
@@ -91,55 +45,41 @@
 body {
     margin: 0;
     padding: 0;
-    min-height: 100vh;                    /* 100vh = full height of the window */
+    min-height: 100vh;
     font-family: var(--font-body);
     color: var(--color-ink);
 
-    /* >>> CHANGE THE BACKGROUND HERE <<< */
     background-color: var(--color-page-bg);
 
-    overflow-x: hidden;                   /* no sideways scrollbar while sliding */
+    overflow-x: hidden;
 }
 
-/* A reusable helper: any element with class "is-hidden" disappears completely.
-   The JavaScript adds and removes this class to switch views. */
 .is-hidden {
     display: none !important;
 }
 
-
-/* ============================================================================
-   SECTION 2 - TOP BAR (logo + title on the left, hamburger on the right)
-   ========================================================================= */
 .topbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;   /* brand pushed left, hamburger right */
+    justify-content: space-between;
     padding: 18px var(--page-pad) 10px;
 }
 
 .brand {
-    display: flex;                    /* places logo and text side by side */
+    display: flex;
     align-items: center;
     gap: 12px;
 }
 
-/* The logo sits on the page background with nothing behind it - no circle, no
-   coloured disc.
-
-   Only the HEIGHT is set (--logo-size); the width follows from the shape of
-   the logo itself, so the mark is never stretched or squashed and there is no
-   empty space left between it and the title. Make it bigger or smaller with
-   that one variable. */
 .brand__logo-box {
     height: var(--logo-size);
-    flex-shrink: 0;                   /* stops the logo being squeezed */
+    flex-shrink: 0;
 }
 
 .brand__logo-img {
     display: block;
     height: 100%;
-    width: auto;                      /* the natural width for that height */
+    width: auto;
 }
 
 .brand__text-box {
@@ -161,8 +101,6 @@ body {
     color: var(--color-ink);
 }
 
-/* --- the hamburger ------------------------------------------------------
-   Three <span>s stacked with a gap; nothing clever, just three bars. */
 .hamburger {
     display: flex;
     flex-direction: column;
@@ -188,39 +126,21 @@ body {
     background: var(--color-sar);
 }
 
-
-/* ============================================================================
-   SECTION 3 - ACTION BAR (SEND REQUEST / DOWNLOAD DATA)
-
-   >>> MOVED <<<  The row itself, the two pill buttons and the notification
-   strip that sits beside them all live in static/css/ui.css, so that the
-   pieces you are most likely to restyle are together in one small file.
-   ========================================================================= */
-
-
-/* ============================================================================
-   SECTION 4 - THE WORKSPACE (the two big panels)
-   "1.55fr 1fr" means the left panel is 1.55 times wider than the right one.
-   Change these two numbers to rebalance the columns.
-   ========================================================================= */
 .workspace {
     display: grid;
     grid-template-columns: 1.55fr 1fr;
     gap: var(--gap);
     padding: 0 var(--page-pad) 34px;
-    align-items: stretch;             /* both panels get the same height */
+    align-items: stretch;
 }
 
-/* --- LEFT: the map box ------------------------------------------------- */
 .map-panel {
     height: var(--panel-height);
     border-radius: var(--radius-panel);
-    background: var(--color-dark);    /* dark = nothing loaded yet */
-    overflow: hidden;                 /* keeps the map inside the round corners */
+    background: var(--color-dark);
+    overflow: hidden;
 }
 
-/* The map itself stays invisible until a scene has been selected, so the box
-   simply reads as "empty". JavaScript adds "is-ready" to .map-panel. */
 .map-panel__canvas {
     width: 100%;
     height: 100%;
@@ -231,24 +151,22 @@ body {
     visibility: visible;
 }
 
-/* --- RIGHT: the catalogue / details box --------------------------------- */
 .side-panel {
     height: var(--panel-height);
     padding: 18px;
     border-radius: var(--radius-panel);
     background: var(--color-sar);
     color: var(--color-on-dark);
-    display: flex;                    /* so the inner view can fill the height */
+    display: flex;
     flex-direction: column;
     overflow: hidden;
 }
 
-/* One of the two views inside the right panel (catalogue or details). */
 .side-view {
     display: flex;
     flex-direction: column;
-    flex: 1;                          /* take all the height available */
-    min-height: 0;                    /* lets the list scroll instead of spilling */
+    flex: 1;
+    min-height: 0;
 }
 
 .side-view__title {
@@ -259,7 +177,6 @@ body {
     color: #FFFFFF;
 }
 
-/* The "Use SEND REQUEST" line, centred in the empty panel. */
 .side-view__hint {
     flex: 1;
     display: flex;
@@ -272,7 +189,6 @@ body {
     color: #FFFFFF;
 }
 
-/* The title row of the details view: arrow first, then the title. */
 .side-view__head {
     display: flex;
     align-items: center;
@@ -284,8 +200,6 @@ body {
     margin: 0;
 }
 
-/* The chevron that reopens the list of scenes. Just the mark itself - no
-   circle, no filled background. It only changes colour on hover. */
 .back-arrow {
     display: flex;
     align-items: center;
@@ -301,9 +215,6 @@ body {
     transition: color var(--speed-fade);
 }
 
-/* The chevron drawing itself. "currentColor" means "whatever colour the button
-   has right now", so the two rules above and below are enough to control it.
-   fill:none + stroke = an outlined line, not a solid shape. */
 .back-arrow svg {
     width: 19px;
     height: 19px;
@@ -318,15 +229,13 @@ body {
     color: #FFFFFF;
 }
 
-/* --- the list of scenes -------------------------------------------------- */
 .scene-list {
-    list-style: none;                 /* removes the bullet points */
+    list-style: none;
     margin: 0;
     padding: 0;
-    overflow-y: auto;                 /* scrolls if there are many scenes */
+    overflow-y: auto;
 }
 
-/* One row. These are created by JavaScript, one per scene. */
 .scene-list__item {
     font-family: var(--font-body);
     font-size: 15px;
@@ -346,8 +255,6 @@ body {
     background: var(--color-accent);
 }
 
-/* --- the editable report inside the details view -------------------------
-   "resize: none" because the panel has a fixed height; the text scrolls. */
 .details-text {
     flex: 1;
     width: 100%;
@@ -361,28 +268,20 @@ body {
     line-height: 1.6;
     color: var(--color-ink);
 
-    /* Not white: a pale tint of the panel's own green, so the box belongs to
-       the panel instead of being a bright rectangle cut out of it. */
     background: var(--color-surface-soft);
 }
 
-
-/* ============================================================================
-   SECTION 5 - SIDEBAR (slides in from the right)
-   ========================================================================= */
-
-/* The dim veil behind the sidebar; clicking it closes the menu. */
 .sidebar-backdrop {
     position: fixed;
-    inset: 0;                          /* covers the whole window */
+    inset: 0;
     background: rgba(31, 39, 27, 0.35);
     z-index: 30;
 }
 
 .sidebar {
-    position: fixed;                   /* sits on top of the page, not inside it */
+    position: fixed;
     top: 0;
-    right: 0;                          /* >>> the menu comes from the RIGHT <<< */
+    right: 0;
     height: 100vh;
     width: var(--sidebar-width);
     padding: 74px 22px 22px;
@@ -391,14 +290,12 @@ body {
     flex-direction: column;
     gap: 12px;
 
-    /* Starting position: pushed fully off-screen to the right. */
     transform: translateX(105%);
     transition: transform var(--speed-slide) cubic-bezier(0.22, 1, 0.36, 1);
 
-    z-index: 40;                       /* higher number = drawn on top */
+    z-index: 40;
 }
 
-/* The open state: slid back to its natural position. */
 .sidebar.is-open {
     transform: translateX(0);
 }
@@ -422,9 +319,6 @@ body {
     background: rgba(255, 255, 255, 0.12);
 }
 
-/* One entry of the menu. Used both by the <button>s and by the <a> link, so
-   they look identical: hence "display: block" and "text-decoration: none",
-   which a link needs and a button does not. */
 .sidebar__btn {
     display: block;
     text-decoration: none;
@@ -447,7 +341,6 @@ body {
     border-color: var(--color-accent);
 }
 
-/* The section we are already looking at. */
 .sidebar__btn.is-current {
     background: var(--color-accent);
     border-color: var(--color-accent);
@@ -455,10 +348,6 @@ body {
     font-weight: 700;
 }
 
-
-/* ============================================================================
-   SECTION 6 - POPUP ("Under construction!")
-   ========================================================================= */
 .popup-overlay {
     position: fixed;
     inset: 0;
@@ -496,14 +385,9 @@ body {
     cursor: pointer;
 }
 
-
-/* ============================================================================
-   SECTION 7 - SMALL SCREENS (phones and narrow windows)
-   Below 900px wide, the two panels stack on top of each other.
-   ========================================================================= */
 @media (max-width: 900px) {
     .workspace {
-        grid-template-columns: 1fr;   /* one column instead of two */
+        grid-template-columns: 1fr;
     }
     .map-panel {
         height: 320px;
@@ -519,8 +403,6 @@ body {
     }
 }
 
-/* Respects the operating-system setting "reduce motion" for people who get
-   motion sickness: animations become instant instead of sliding. */
 @media (prefers-reduced-motion: reduce) {
     * {
         transition-duration: 0.01ms !important;

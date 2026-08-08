@@ -105,7 +105,8 @@
 
 <div class="processing-overlay is-hidden" id="processingOverlay" role="status" aria-live="polite">
     <div class="processing-card">
-        <div class="processing-spinner" aria-hidden="true"></div>
+        <img class="processing-anim" aria-hidden="true" alt=""
+             src="{{ url_for('static', filename='anim/loader.svg') }}">
         <p class="processing-message" id="processingMessage">Processing...</p>
     </div>
 </div>
