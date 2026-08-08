@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ settings.project_title }}</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
+</head>
+
+<body>
+
+<header class="topbar">
+
+    <div class="brand">
+        <div class="brand__logo-box">
+            <img class="brand__logo-img"
+                 src="{{ url_for('static', filename=settings.logo_path) }}"
+                 alt="Project logo"
+                 onerror="this.style.display='none'">
+        </div>
+
+        <div class="brand__text-box">
+            <h1 class="brand__title">{{ settings.project_title }}</h1>
+            <p class="brand__subtitle">{{ settings.project_subtitle }}</p>
+        </div>
+    </div>
+
+    <button class="hamburger" id="btnHamburger" aria-label="Open menu">
+        <span></span><span></span><span></span>
+    </button>
+</header>
+
+
+<nav class="action-bar">
+    <button class="pill-btn" id="btnRequest">{{ settings.btn_request_label }}</button>
+    <button class="pill-btn" id="btnDownload">{{ settings.btn_download_label }}</button>
+
+    <div class="notice is-hidden" id="notice" role="status" aria-live="polite">
+        <span class="notice__dot" aria-hidden="true"></span>
+        <span class="notice__text" id="noticeText"></span>
+    </div>
+</nav>
+
+
+<main class="workspace">
+
+    <section class="map-panel" id="mapPanel">
+        <div id="map" class="map-panel__canvas"></div>
+    </section>
+
+    <aside class="side-panel">
+
+        <div class="side-view" id="catalogueView">
+            <h2 class="side-view__title">{{ settings.catalogue_title }}</h2>
+            <p class="side-view__hint" id="catalogueHint">{{ settings.catalogue_hint }}</p>
+            <ul class="scene-list" id="imageList"></ul>
+        </div>
+
+        <div class="side-view is-hidden" id="detailsView">
+            <div class="side-view__head">
+                <button class="back-arrow" id="btnDetailsBack" aria-label="Back to the scene list">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <polyline points="15 4 7 12 15 20"></polyline>
+                    </svg>
+                </button>
+                <h2 class="side-view__title">{{ settings.details_title }}</h2>
+            </div>
+
+            <textarea class="details-text" id="reportText" spellcheck="false"></textarea>
+        </div>
+
+    </aside>
+</main>
+
+
+<div class="sidebar-backdrop is-hidden" id="sidebarBackdrop"></div>
+
+<nav class="sidebar" id="sidebar">
+    <button class="sidebar__close" id="btnSidebarClose" aria-label="Close menu">&times;</button>
+
+    <button class="sidebar__btn is-current" id="btnSarScenes">SAR Scenes</button>
+
+    <a class="sidebar__btn" id="linkAisArchive"
+       href="{{ settings.link_ais_archive }}">AIS Database Archive</a>
+
+    <button class="sidebar__btn" id="btnDarkAlerts">Dark Vessel Alerts</button>
+</nav>
+
+
+<div class="popup-overlay is-hidden" id="popupOverlay">
+    <div class="popup">
+        <p class="popup__message" id="popupMessage">Under construction!</p>
+        <button class="popup__close" id="popupClose">OK</button>
+    </div>
+</div>
+
+<div class="processing-overlay is-hidden" id="processingOverlay" role="status" aria-live="polite">
+    <div class="processing-card">
+        <div class="processing-spinner" aria-hidden="true"></div>
+        <p class="processing-message" id="processingMessage">Processing...</p>
+    </div>
+</div>
+
+
+<script>
+    const BAKLAVA_SETTINGS = {{ settings | tojson }};
+</script>
+
+<script src="{{ url_for('static', filename='js/baklava.js') }}"></script>
+
+</body>
+</html>

@@ -1,0 +1,1 @@
+Put your loading animation here (e.g. loading.gif), then set loading_animation_path in app.py to anim/loading.gif

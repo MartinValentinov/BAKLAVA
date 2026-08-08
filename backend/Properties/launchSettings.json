@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "BaklavaBackend": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "http://localhost:5080"
+    }
+  }
+}
