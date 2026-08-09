@@ -11,4 +11,14 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
+  <!-- dark-vessel-detection/ is a separate solution (DarkVessel.sln), built
+       and run independently; nested here for repo layout only. Without
+       this, SDK-style implicit globbing would pull its files (including its
+       own Program.cs top-level statements) into this project's compilation. -->
+  <ItemGroup>
+    <Compile Remove="dark-vessel-detection/**/*.cs" />
+    <Content Remove="dark-vessel-detection/**/*" />
+    <None Remove="dark-vessel-detection/**/*" />
+  </ItemGroup>
+
 </Project>
