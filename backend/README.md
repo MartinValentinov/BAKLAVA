@@ -51,6 +51,25 @@ success or `502 { ok: false, error }` on failure — the Jetson-side service
 marks the image processed on success, so it drops out of future
 `list-images` results.
 
+## Dark-vessel matching
+
+`GET /api/scenes/{name}` calls out to a separate service, `DarkVessel.Api`
+(cross-references each detected ship against the AIS archive), and returns
+**only ships it reports as `"Dark"`** — not every ship the model detected.
+`"UnknownNoCoverage"` (AIS wasn't being listened for at that time) and
+`"Matched"` (a real vessel explains the detection) are both filtered out.
+
+Config (`DarkVessel:BaseUrl` / `DarkVessel:ApiKey`) must point at a running
+`DarkVessel.Api` instance and match its own `Api:ApiKey` secret. `BaseUrl`
+defaults to nothing — it's required, same as `JetsonClient:ScriptPath`.
+`DarkVessel:MaxConcurrentMatches` (default 8) caps how many ships from one
+scene are matched concurrently, since each match fans out to further calls
+inside `DarkVessel.Api`.
+
+The wire shape of `GET /api/scenes/{name}` is unchanged (still `{ ships, meta }`)
+— only which ships appear in `ships`, and `meta.ships`'s count, are affected.
+`POST /api/scenes/sync` is untouched and still returns every ship.
+
 ## Notes
 
 - Every call happens synchronously inside the request — for a scene the
