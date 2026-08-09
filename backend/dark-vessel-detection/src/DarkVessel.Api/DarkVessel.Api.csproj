@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DarkVessel.Core\DarkVessel.Core.csproj" />
+    <ProjectReference Include="..\DarkVessel.Infrastructure\DarkVessel.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>26efaf63-d64c-4ee4-a110-8876d2f52a96</UserSecretsId>
+  </PropertyGroup>
+
+</Project>

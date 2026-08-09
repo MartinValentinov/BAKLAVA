@@ -53,11 +53,16 @@ marks the image processed on success, so it drops out of future
 
 ## Dark-vessel matching
 
-`GET /api/scenes/{name}` calls out to a separate service, `DarkVessel.Api`
-(cross-references each detected ship against the AIS archive), and returns
-**only ships it reports as `"Dark"`** — not every ship the model detected.
-`"UnknownNoCoverage"` (AIS wasn't being listened for at that time) and
-`"Matched"` (a real vessel explains the detection) are both filtered out.
+`GET /api/scenes/{name}` calls out to a separate, still-independently-running
+service, `DarkVessel.Api` — its source now lives in this repo at
+[`dark-vessel-detection/`](dark-vessel-detection) (see its own
+[README](dark-vessel-detection/README.md) for setup/secrets) but it's still a
+second process on its own port (`5252` by default), not something this
+backend hosts itself. It cross-references each detected ship against the AIS
+archive, and `GET /api/scenes/{name}` returns **only ships it reports as
+`"Dark"`** — not every ship the model detected. `"UnknownNoCoverage"` (AIS
+wasn't being listened for at that time) and `"Matched"` (a real vessel
+explains the detection) are both filtered out.
 
 Config (`DarkVessel:BaseUrl` / `DarkVessel:ApiKey`) must point at a running
 `DarkVessel.Api` instance and match its own `Api:ApiKey` secret. `BaseUrl`

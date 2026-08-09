@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark Vessel — .NET console</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f4f6f8; margin: 0; padding: 2rem; color: #1a1a1a; }
+  .card { background: #fff; border: 1px solid #dee2e6; border-radius: .5rem; padding: 1.25rem; margin-bottom: 1.25rem; max-width: 640px; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.05rem; margin-top: 0; }
+  label { display: block; font-size: .8rem; color: #666; margin-top: .6rem; }
+  input { width: 100%; padding: .4rem; box-sizing: border-box; font-family: inherit; }
+  button { padding: .6rem 1.2rem; font-weight: 600; border: none; border-radius: .3rem; cursor: pointer; margin-top: .8rem; }
+  .start { background: #198754; color: #fff; }
+  .stop { background: #dc3545; color: #fff; }
+  .go { background: #0d6efd; color: #fff; }
+  pre { background: #0d1117; color: #c9d1d9; padding: .8rem; border-radius: .3rem; overflow-x: auto; font-size: .8rem; }
+  .dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; background: #adb5bd; margin-right: .4rem; }
+  .dot.live { background: #198754; }
+</style>
+</head>
+<body>
+
+<h1>Dark Vessel — .NET</h1>
+
+<div class="card">
+  <h2><span class="dot" id="dot"></span>Collector <span id="state">checking…</span></h2>
+  <button class="start" onclick="control('start')">START</button>
+  <button class="stop" onclick="control('stop')">STOP</button>
+  <pre id="status">…</pre>
+</div>
+
+<div class="card">
+  <h2>Match a detection</h2>
+  <label>Detection ID</label><input id="detId" value="test-1">
+  <label>Latitude</label><input id="lat" value="42.50">
+  <label>Longitude</label><input id="lon" value="27.20">
+  <label>Timestamp (UTC, ISO 8601)</label><input id="ts" value="">
+  <button class="go" onclick="doMatch()">Check against AIS</button>
+  <pre id="matchResult">—</pre>
+</div>
+
+<script>
+  const apiKey = localStorage.getItem('dv_api_key') || prompt('API key (X-Api-Key):') || '';
+  localStorage.setItem('dv_api_key', apiKey);
+  const headers = { 'Content-Type': 'application/json', 'X-Api-Key': apiKey };
+
+  document.getElementById('ts').value = new Date().toISOString();
+
+  async function poll() {
+    try {
+      const res = await fetch('/api/status', { headers });
+      const data = await res.json();
+      document.getElementById('status').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('state').textContent = data.running ? 'LIVE' : (data.desired === 'running' ? 'starting…' : 'stopped');
+      document.getElementById('dot').className = 'dot' + (data.running ? ' live' : '');
+    } catch (e) {
+      document.getElementById('status').textContent = 'unreachable: ' + e.message;
+    }
+  }
+
+  async function control(action) {
+    await fetch('/api/control/' + action, { method: 'POST', headers });
+    await poll();
+  }
+
+  async function doMatch() {
+    const body = JSON.stringify({
+      detectionId: document.getElementById('detId').value,
+      lat: parseFloat(document.getElementById('lat').value),
+      lon: parseFloat(document.getElementById('lon').value),
+      timestampUtc: document.getElementById('ts').value,
+    });
+    const res = await fetch('/api/match', { method: 'POST', headers, body });
+    document.getElementById('matchResult').textContent = JSON.stringify(await res.json(), null, 2);
+  }
+
+  poll();
+  setInterval(poll, 2000);
+</script>
+</body>
+</html>
