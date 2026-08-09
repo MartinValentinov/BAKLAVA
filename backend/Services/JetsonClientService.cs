@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace BaklavaBackend.Services;
 
@@ -34,15 +35,31 @@ public class JetsonClientService
     {
         var psi = new ProcessStartInfo
         {
-            FileName = _scriptPath,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             RedirectStandardInput = stdin is not null,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+
+        // Windows has no shebang support, so .sh scripts can't be launched
+        // directly (unlike macOS/Linux, where the OS reads the "#!" line).
+        // Run them through Git Bash instead.
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            psi.FileName = "bash";
+            psi.ArgumentList.Add(_scriptPath);
+        }
+        else
+        {
+            psi.FileName = _scriptPath;
+        }
         foreach (var a in args)
             psi.ArgumentList.Add(a);
+
+        // Single-source DestDir from config instead of the value hardcoded
+        // in jetson_client.sh, so the two can't silently drift apart.
+        psi.EnvironmentVariables["BAKLAVA_DEST_DIR"] = DestDir.Replace('\\', '/');
 
         using var process = new Process { StartInfo = psi };
 

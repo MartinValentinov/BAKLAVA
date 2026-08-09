@@ -16,7 +16,7 @@ JETSON_HOST="10.11.250.25"
 JETSON_PORT="8080"
 JETSON_URL="http://$JETSON_HOST:$JETSON_PORT"
 JETSON_TOKEN="${BAKLAVA_TOKEN:-}"
-DEST_DIR="/Users/martinvalentinov/Desktop/scenes"
+DEST_DIR="${BAKLAVA_DEST_DIR:-/Users/martinvalentinov/Desktop/scenes}"
 
 mkdir -p "$DEST_DIR"
 

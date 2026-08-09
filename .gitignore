@@ -4,3 +4,5 @@ __pycache__/
 *claude*/
 obj/
 bin/
+backend/appsettings.Development.json
+scenes/
