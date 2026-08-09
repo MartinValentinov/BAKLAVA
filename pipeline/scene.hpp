@@ -18,7 +18,15 @@ public:
     ~Scene();
 
     bool open(const std::string& path);
-    bool readAll();                     // blocking full-band read into pinned memory
+
+    // Blocking full-band read into pinned memory. When `fastPath` is set, tries
+    // a raw libtiff strip/tile read straight into the pinned buffer first --
+    // GDAL's own RasterIO measured ~2.5x slower into this GPU-mapped memory
+    // than a bulk libtiff read (see pipeline/README.md's perf notes). Falls
+    // back to RasterIO for anything that isn't a single uncompressed
+    // strip/tile covering the whole raster -- correctness never depends on
+    // the fast path succeeding.
+    bool readAll(bool fastPath);
 
     int      width()  const { return W_; }
     int      height() const { return H_; }
@@ -63,7 +71,7 @@ private:
     float* hostPtr_ = nullptr;
     float* devPtr_  = nullptr;
 
-    std::string base_, acq_, start_, stop_;
+    std::string path_, base_, acq_, start_, stop_;
 
     void parseFilename();
 };

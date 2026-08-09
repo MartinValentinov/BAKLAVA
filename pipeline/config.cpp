@@ -18,6 +18,8 @@ void Config::usage(const char* prog) {
 "  --batch N              default 8   (must match the frozen ONNX)\n"
 "  --overlap N            tile overlap in px, default 64\n"
 "  --streams N            concurrent streams/contexts, default 2\n"
+"  --no-fast-scene-read   always use GDAL RasterIO for the scene read "
+"(debug use)\n"
 "\n"
 "radiometry (matches the training render):\n"
 "  --db-lo F              default -25\n"
@@ -64,6 +66,7 @@ Config Config::parse(int argc, char** argv) {
         else if (a == "--batch")          { c.batch = std::atoi(need(i)); ++i; }
         else if (a == "--overlap")        { c.overlap = std::atoi(need(i)); ++i; }
         else if (a == "--streams")        { c.streams = std::atoi(need(i)); ++i; }
+        else if (a == "--no-fast-scene-read") { c.fast_scene_read = false; }
         else if (a == "--db-lo")          { c.db_lo = std::atof(need(i)); ++i; }
         else if (a == "--db-hi")          { c.db_hi = std::atof(need(i)); ++i; }
         else if (a == "--conf")           { c.conf = std::atof(need(i)); ++i; }

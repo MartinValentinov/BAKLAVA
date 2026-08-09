@@ -20,6 +20,7 @@ struct Config {
     int   batch    = 8;                    // must match the frozen ONNX
     int   overlap  = 64;                   // px of overlap between tiles
     int   streams  = 2;                    // concurrent CUDA streams / TRT contexts
+    bool  fast_scene_read = true;          // raw libtiff read, see scene.cpp
 
     // --- radiometry --------------------------------------------------------
     // g = clamp((10*log10(sigma0) - db_lo) / (db_hi - db_lo), 0, 1)

@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
 
     {
         Timer t("scene read (excluded)");
-        if (!scene.readAll()) return 1;
+        if (!scene.readAll(cfg.fast_scene_read)) return 1;
         t.report();
     }
 

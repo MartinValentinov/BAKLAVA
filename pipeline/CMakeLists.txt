@@ -43,6 +43,21 @@ if(GDAL_LIBRARY_DIRS)
   link_directories(${GDAL_LIBRARY_DIRS})
 endif()
 
+# ---- libtiff -----------------------------------------------------------
+# Not a new runtime dependency -- GDAL's own GTiff driver already links
+# libtiff. scene.cpp talks to it directly for a raw strip/tile read that
+# bypasses GDAL's RasterIO, which measured ~2.5x slower writing into this
+# pipeline's pinned/GPU-mapped scene buffer (see pipeline/README.md).
+pkg_check_modules(TIFF libtiff-4)
+if(NOT TIFF_FOUND)
+  find_path(TIFF_INCLUDE_DIRS tiffio.h)
+  find_library(TIFF_LIBRARIES NAMES tiff)
+endif()
+if(NOT TIFF_INCLUDE_DIRS OR NOT TIFF_LIBRARIES)
+  message(FATAL_ERROR "libtiff not found. apt install libtiff-dev")
+endif()
+message(STATUS "libtiff version: ${TIFF_VERSION}")
+
 # ---- TensorRT --------------------------------------------------------------
 set(TRT_ROOT "/usr" CACHE PATH "TensorRT install prefix")
 find_path(TRT_INCLUDE_DIR NvInfer.h
@@ -69,11 +84,13 @@ add_executable(sar_ship_detect
 target_include_directories(sar_ship_detect PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${GDAL_INCLUDE_DIRS}
+  ${TIFF_INCLUDE_DIRS}
   ${TRT_INCLUDE_DIR}
 )
 
 target_link_libraries(sar_ship_detect PRIVATE
   ${GDAL_LIBRARIES}
+  ${TIFF_LIBRARIES}
   ${TRT_NVINFER}
   ${TRT_ONNXPARSER}
   CUDA::cudart
