@@ -36,12 +36,65 @@ contract didn't change.
 
 | Method | Path                      | Maps to                          |
 |--------|---------------------------|-----------------------------------|
-| GET    | `/api/scenes`             | `jetson_client.sh list` — processed scene names |
-| GET    | `/api/scenes/{name}`      | `jetson_client.sh get NAME` — one scene's JSON |
+| GET    | `/api/scenes`             | `list`, then `get` per scene — the map's scene boxes |
+| GET    | `/api/scenes/{name}`      | one scene with its vessels, in map-frontend shape |
+| GET    | `/api/scenes/{name}/raw`  | the detector's own JSON, normalised onto `meta`+`ships` |
+| GET    | `/api/scenes/{name}/overview` | `jetson_client.sh overview NAME` — the SAR overlay image |
+| GET    | `/api/scenes/{name}/crops` | `jetson_client.sh crops NAME` — the water-crop manifest |
+| GET    | `/api/scenes/{name}/crops/{path}` | one crop or thumbnail image |
 | POST   | `/api/scenes/sync`        | `jetson_client.sh get-all`, then reads the pulled JSONs back and returns them |
-| POST   | `/api/scenes/available`   | `jetson_client.sh list-images` — raw, not-yet-processed image names |
+| POST   | `/api/scenes/available`   | `jetson_client.sh list-images` — raw, not-yet-processed products |
 | POST   | `/api/scenes/{name}/process` | `jetson_client.sh process NAME` — runs detection on the Jetson, blocks until done |
 | POST   | `/api/coords?name=`       | `jetson_client.sh send-coords`   |
+
+### What the map frontend gets
+
+`GET /api/scenes` and `GET /api/scenes/{name}` answer in the shape
+`new_frontend/` expects, written down in its README under "Backend contract".
+The translation lives in `Common/SceneProjector.cs`; `Common/FrontendModels.cs`
+is that contract expressed as C# records, so renaming a field here without
+mirroring it there is a compile error rather than a silently empty map.
+
+Three things are worth knowing about it:
+
+**Scene corners.** The frontend draws each scene as a box *before* anything is
+known about its vessels, so it needs the scene's own footprint. The detector
+now writes one (`footprint_lonlat` in its output JSON). Scenes produced before
+that fall back to the bounding box of their detections, which is smaller than
+the truth but better than no box.
+
+**`dark`.** A vessel is dark when `DarkVessel.Api` reports anything other than
+`Matched` — so both a genuine AIS absence and "nobody was listening there" count
+as dark, for the reasons that service's own docs give. When AIS matching is
+switched off, or the scene has no usable acquisition time, or the matcher is
+down, **every** detection is reported dark. That is the honest reading — with
+nothing to compare against, nothing has been ruled out — and it is the safe
+direction to fail in. A matching outage must not quietly empty the map.
+
+**Caching.** Building the scene list means reading every scene, and each read is
+a `jetson_client.sh` process over the link. `SceneCatalogService` caches them.
+A processed scene is immutable (its name carries the acquisition timestamp), so
+entries are only dropped when `POST /api/scenes/{name}/process` re-runs one.
+
+### Imagery: the overview and the water crops
+
+These come from the detector's newer outputs and are pulled lazily, per scene,
+the first time they are asked for:
+
+* **The overview** is a decimated whole-scene render with the detections drawn
+  on it — a few hundred kB. It is served as the frontend's `sar_overlay`.
+* **The crops** are the scene's water, cut into 1024 px grayscale JPEGs, plus a
+  256 px thumbnail tier and a manifest describing every one.
+
+`GET /api/scenes/{name}/crops` pulls **only the thumbnail tier** (~2.5 MB for a
+whole scene). `?full=true` additionally pulls every crop at full resolution,
+which is tens of megabytes over the link — that tiering is the whole point, so
+do not make it the default. The manifest's relative paths are rewritten into
+`file_url` / `thumb_url` pointing back at this API, so a client never needs to
+know how the files are laid out on disk.
+
+Crop paths are resolved against the scene's own directory and anything that
+escapes it is refused, so a manifest path is never trusted as a filesystem path.
 
 `POST /api/coords` expects a raw JSON body (the coordinates payload) and
 an optional `?name=` query param.

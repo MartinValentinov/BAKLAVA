@@ -30,6 +30,7 @@ const popupOverlay          = document.getElementById("popupOverlay");
 const popupMessage          = document.getElementById("popupMessage");
 const btnClosePopup         = document.getElementById("btnClosePopup");
 
+
 const loaderOverlay         = document.getElementById("loaderOverlay");
 const loaderText            = document.getElementById("loaderText");
 
@@ -507,11 +508,15 @@ btnOpenMenu.addEventListener("click", openSidebar);
 btnCloseMenu.addEventListener("click", closeSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
 
+<<<<<<< HEAD
 btnMenuScenes.addEventListener("click", closeSidebar);
 btnMenuDarkAlerts.addEventListener("click", () => {
     closeSidebar();
     showPopup("Under construction!");
 });
+=======
+btnSarScenes.addEventListener("click", closeSidebar);
+>>>>>>> 432a56c (latest)
 
 btnClosePopup.addEventListener("click", hidePopup);
 popupOverlay.addEventListener("click", (event) => {

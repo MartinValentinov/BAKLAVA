@@ -35,6 +35,7 @@ public sealed class HttpAisSource : IAisSource
 
     private readonly HttpClient _http;
     private readonly ILogger<HttpAisSource> _logger;
+    private readonly TimeZoneInfo _queryTimeZone;
 
     public HttpAisSource(HttpClient http, IOptions<BaklavaApiOptions> options, ILogger<HttpAisSource> logger)
     {
@@ -46,9 +47,33 @@ public sealed class HttpAisSource : IAisSource
             _http.DefaultRequestHeaders.Remove("X-API-Key");
             _http.DefaultRequestHeaders.Add("X-API-Key", apiKey);
         }
+        _queryTimeZone = ResolveTimeZone(options.Value.QueryTimeZone);
         // BaseAddress itself is set via AddHttpClient in Program.cs, from
         // BaklavaApiOptions.BaseUrl -- keeps the "where" (DI wiring) and the
         // "how" (this class) separate.
+    }
+
+    private TimeZoneInfo ResolveTimeZone(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return TimeZoneInfo.Utc;
+        }
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(id);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            // Falling back to UTC is the pre-fix behavior: every window query
+            // comes back empty and every detection reads UnknownNoCoverage.
+            // Loud, because silently matching nothing looks like "no AIS data".
+            _logger.LogError(ex,
+                "Baklava:QueryTimeZone '{Id}' is not a timezone this machine knows; falling back to UTC. "
+                + "Time-windowed AIS queries will return nothing until this is a valid id (e.g. Europe/Sofia).",
+                id);
+            return TimeZoneInfo.Utc;
+        }
     }
 
     // -- IAisSource (read side, used by Matcher) -----------------------------
@@ -62,8 +87,8 @@ public sealed class HttpAisSource : IAisSource
         var bbox = FormattableString.Invariant($"{latLo},{lonLo},{latHi},{lonHi}");
 
         var url = "?resource=ais_positions"
-            + "&since=" + Uri.EscapeDataString(FormatUtc(when - half))
-            + "&until=" + Uri.EscapeDataString(FormatUtc(when + half))
+            + "&since=" + Uri.EscapeDataString(FormatQueryTime(when - half))
+            + "&until=" + Uri.EscapeDataString(FormatQueryTime(when + half))
             + "&bbox=" + Uri.EscapeDataString(bbox)
             + "&limit=5000";
 
@@ -105,8 +130,8 @@ public sealed class HttpAisSource : IAisSource
     {
         var slack = TimeSpan.FromMinutes(slackMinutes);
         var url = "?resource=ais_positions"
-            + "&since=" + Uri.EscapeDataString(FormatUtc(when - slack))
-            + "&until=" + Uri.EscapeDataString(FormatUtc(when + slack))
+            + "&since=" + Uri.EscapeDataString(FormatQueryTime(when - slack))
+            + "&until=" + Uri.EscapeDataString(FormatQueryTime(when + slack))
             + "&limit=1";
 
         var envelope = await GetAsync<AisPositionsEnvelope>(url, ct).ConfigureAwait(false);
@@ -242,6 +267,16 @@ public sealed class HttpAisSource : IAisSource
     }
 
     private static string FormatUtc(DateTime dt) => dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// A UTC instant written the way the API's since/until parameters are read:
+    /// in the server's local time, not UTC. See <see cref="BaklavaApiOptions.QueryTimeZone"/>
+    /// for the evidence. Only the query bounds need this -- the ts values written by
+    /// <see cref="InsertPositionsAsync"/> and returned by reads are both plain UTC,
+    /// so those keep using <see cref="FormatUtc"/>.
+    /// </summary>
+    private string FormatQueryTime(DateTime utc) =>
+        FormatUtc(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _queryTimeZone));
 
     private static bool TryParseUtc(string? s, out DateTime result)
     {

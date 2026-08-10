@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using BaklavaBackend.Common;
 
 namespace BaklavaBackend.Services;
 
@@ -10,6 +11,8 @@ public class JetsonClientService
     private readonly string _scriptPath;
     private readonly int _timeoutSeconds;
     private readonly int _processTimeoutSeconds;
+    private readonly string? _token;
+    private readonly string? _backend;
     private readonly ILogger<JetsonClientService> _logger;
 
     public string DestDir { get; }
@@ -17,15 +20,23 @@ public class JetsonClientService
     public JetsonClientService(IConfiguration config, ILogger<JetsonClientService> logger)
     {
         _logger = logger;
-        _scriptPath = config["JetsonClient:ScriptPath"]
-            ?? throw new InvalidOperationException("JetsonClient:ScriptPath is not configured");
-        DestDir = config["JetsonClient:DestDir"]
-            ?? throw new InvalidOperationException("JetsonClient:DestDir is not configured");
+        _scriptPath = config.Require("JetsonClient:ScriptPath");
+        DestDir = config.Require("JetsonClient:DestDir");
         _timeoutSeconds = int.TryParse(config["JetsonClient:TimeoutSeconds"], out var t) ? t : 60;
         _processTimeoutSeconds = int.TryParse(config["JetsonClient:ProcessTimeoutSeconds"], out var pt) ? pt : 1800;
+        _token = config["JetsonClient:Token"];
+        _backend = config["JetsonClient:Backend"];
 
         if (!File.Exists(_scriptPath))
             _logger.LogWarning("jetson_client.sh not found at {Path}", _scriptPath);
+
+        if (string.IsNullOrWhiteSpace(_token) &&
+            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BAKLAVA_TOKEN")))
+        {
+            _logger.LogWarning(
+                "No JetsonClient:Token configured and no BAKLAVA_TOKEN in the environment; "
+                + "the listener daemon will answer 401 unless it is running unauthenticated");
+        }
     }
 
     public Task<ProcessResult> RunProcessAsync(IEnumerable<string> args, CancellationToken ct = default) =>
@@ -60,6 +71,18 @@ public class JetsonClientService
         // Single-source DestDir from config instead of the value hardcoded
         // in jetson_client.sh, so the two can't silently drift apart.
         psi.EnvironmentVariables["BAKLAVA_DEST_DIR"] = DestDir.Replace('\\', '/');
+
+        // The listener daemon authenticates with a bearer token; jetson_client.sh
+        // reads it from BAKLAVA_TOKEN. Config wins so the backend works however
+        // it was launched, but a token already in this process's environment is
+        // left alone as the fallback.
+        if (!string.IsNullOrWhiteSpace(_token))
+            psi.EnvironmentVariables["BAKLAVA_TOKEN"] = _token;
+
+        // Which detector listener_service.py should run: "cpp" or "legacy".
+        // Unset leaves jetson_client.sh's own default in charge.
+        if (!string.IsNullOrWhiteSpace(_backend))
+            psi.EnvironmentVariables["BAKLAVA_BACKEND"] = _backend;
 
         using var process = new Process { StartInfo = psi };
 

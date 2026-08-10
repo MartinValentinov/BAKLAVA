@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json.Nodes;
 using BaklavaBackend.Common;
 using BaklavaBackend.Services;
@@ -6,109 +5,214 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BaklavaBackend.Controllers;
 
+/// The API the map frontend (new_frontend/) talks to.
+///
+/// GET /api/scenes and GET /api/scenes/{name} answer in the shape that
+/// frontend expects - see new_frontend/README.md, "Backend contract". The
+/// detector's own format is still available under /raw for anything that wants
+/// it, and the pre-existing sync/available/process endpoints are unchanged.
 [ApiController]
 [Route("api/scenes")]
 public class ScenesController : ControllerBase
 {
     private readonly JetsonClientService _client;
+    private readonly SceneCatalogService _catalog;
     private readonly DarkVesselMatchService _darkVessel;
+    private readonly ILogger<ScenesController> _logger;
 
-    public ScenesController(JetsonClientService client, DarkVesselMatchService darkVessel)
+    public ScenesController(JetsonClientService client, SceneCatalogService catalog,
+                            DarkVesselMatchService darkVessel, ILogger<ScenesController> logger)
     {
         _client = client;
+        _catalog = catalog;
         _darkVessel = darkVessel;
+        _logger = logger;
     }
 
-    /// GET /api/scenes — list available processed scene names, newest first.
+    /// GET /api/scenes — the blue boxes on the map.
+    ///
+    /// Every scene has to carry its footprint, and a footprint only exists
+    /// inside that scene's own JSON, so this reads each one. They are cached
+    /// after the first call (SceneCatalogService), and a scene that cannot be
+    /// read is skipped rather than failing the whole list - one bad scene
+    /// should not empty the picker.
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        var result = await _client.RunAsync(new[] { "list" }, ct: ct);
-        if (result.ExitCode != 0)
-            return StatusCode(502, new { error = result.StdErr.Trim() });
+        IReadOnlyList<string> names;
+        try
+        {
+            names = await _catalog.ListNamesAsync(ct);
+        }
+        catch (JetsonException ex)
+        {
+            return StatusCode(502, new { error = ex.Message });
+        }
 
-        var names = result.StdOut
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var scenes = new List<SceneSummary>();
+        foreach (var name in names)
+        {
+            if (!Validation.IsSafeName(name))
+                continue;
 
-        return Ok(names);
+            var cached = await _catalog.GetSceneAsync(name, ct);
+            if (cached is null)
+                continue;
+
+            var corners = SceneProjector.Footprint(cached.Normalized, cached.Raw);
+            if (corners is null)
+            {
+                _logger.LogInformation(
+                    "scene {Scene} has neither a footprint nor a positioned detection; "
+                    + "leaving it out of the picker", name);
+                continue;
+            }
+
+            // Authoritative only once the overview has actually been fetched.
+            // Until then the cpp backend is assumed to have produced one,
+            // because run.sh and the container service both enable it by
+            // default; GET /api/scenes/{name} settles it for real.
+            var hasSar = System.IO.File.Exists(_catalog.OverviewPath(name))
+                         || cached.Raw is not null;
+
+            scenes.Add(new SceneSummary(
+                Id: name,
+                Label: SceneProjector.Label(name, cached.Normalized["meta"] as JsonObject),
+                Corners: corners,
+                HasSar: hasSar));
+        }
+
+        return Ok(new SceneListResponse(scenes));
     }
 
-    /// GET /api/scenes/{name} — fetch one scene's JSON by exact name (no .json suffix).
+    /// GET /api/scenes/{name} — one scene with its vessels, in frontend shape.
     [HttpGet("{name}")]
     public async Task<IActionResult> Get(string name, CancellationToken ct)
     {
         if (!Validation.IsSafeName(name))
             return BadRequest(new { error = "invalid scene name" });
 
-        var result = await _client.RunAsync(new[] { "get", name }, ct: ct);
-        if (result.ExitCode != 0)
-            return NotFound(new { error = result.StdErr.Trim() });
+        var cached = await _catalog.GetSceneAsync(name, ct);
+        if (cached is null)
+            return NotFound(new { error = $"no scene '{name}' on the Jetson" });
 
-        var path = Path.Combine(_client.DestDir, name + ".json");
-        if (!System.IO.File.Exists(path))
-            return StatusCode(502, new { error = "jetson_client.sh reported success but wrote no file" });
+        var corners = SceneProjector.Footprint(cached.Normalized, cached.Raw);
+        if (corners is null)
+            return StatusCode(502, new { error = "scene has no footprint and no positioned detections" });
 
-        var content = await System.IO.File.ReadAllTextAsync(path, ct);
+        var darkIds = await ComputeDarkIdsAsync(name, cached.Normalized, ct);
+        var vessels = SceneProjector.Vessels(name, cached.Normalized, darkIds);
 
-        JsonObject root;
-        try
+        // The overview render is the SAR overlay. It is pulled lazily: it is a
+        // few hundred kB per scene and only wanted when a scene is opened.
+        SarOverlay? overlay = null;
+        var overviewPath = await _catalog.EnsureOverviewAsync(name, ct);
+        if (overviewPath is not null)
+            overlay = new SarOverlay($"/api/scenes/{Uri.EscapeDataString(name)}/overview", corners);
+
+        // The crop manifest, if the detector produced one. Only the thumbnail
+        // tier is pulled here; the full-resolution crops are a separate,
+        // explicit request.
+        CropSummary? crops = null;
+        var manifest = await _catalog.EnsureCropsAsync(name, full: false, ct);
+        if (manifest is not null)
         {
-            root = JsonNode.Parse(content)!.AsObject();
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(502, new { error = $"scene JSON could not be parsed: {ex.Message}" });
-        }
-
-        var meta = root["meta"]?.AsObject();
-        var ships = root["ships"]?.AsArray();
-        if (meta is null || ships is null)
-            return Content(content, "application/json");
-
-        var acquiredRaw = meta["acquired"]?.GetValue<string>();
-        if (string.IsNullOrEmpty(acquiredRaw) ||
-            !DateTime.TryParse(acquiredRaw, CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var acquiredUtc))
-        {
-            return StatusCode(502, new { error = $"scene meta.acquired could not be parsed as a timestamp: '{acquiredRaw}'" });
-        }
-
-        var detections = new List<ShipDetection>();
-        foreach (var shipNode in ships)
-        {
-            var ship = shipNode!.AsObject();
-            var id = ship["id"]!.GetValue<int>();
-            var lat = ship["latitude"]!.GetValue<double>();
-            var lon = ship["longitude"]!.GetValue<double>();
-            var heading = ship["heading"]?.GetValue<double?>();
-            detections.Add(new ShipDetection($"{name}-{id}", lat, lon, heading));
+            crops = new CropSummary(
+                Count: manifest["count"]?.GetValue<int>() ?? 0,
+                CropSize: manifest["crop_size"]?.GetValue<int>() ?? 0,
+                ThumbSize: manifest["thumb_size"]?.GetValue<int>() ?? 0,
+                BytesFull: manifest["bytes_full"]?.GetValue<long>() ?? 0,
+                BytesThumb: manifest["bytes_thumb"]?.GetValue<long>() ?? 0,
+                ManifestUrl: $"/api/scenes/{Uri.EscapeDataString(name)}/crops");
         }
 
-        HashSet<string> darkDetectionIds;
-        try
-        {
-            darkDetectionIds = await _darkVessel.FilterDarkAsync(detections, acquiredUtc, ct);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(502, new { error = $"dark-vessel match failed: {ex.Message}" });
-        }
-
-        for (var i = ships.Count - 1; i >= 0; i--)
-        {
-            var id = ships[i]!.AsObject()["id"]!.GetValue<int>();
-            if (!darkDetectionIds.Contains($"{name}-{id}"))
-                ships.RemoveAt(i);
-        }
-        meta["ships"] = ships.Count;
-
-        return Content(root.ToJsonString(), "application/json");
+        return Ok(new SceneDetail(
+            Id: name,
+            Label: SceneProjector.Label(name, cached.Normalized["meta"] as JsonObject),
+            Corners: corners,
+            Totals: new SceneTotals(vessels.Count, vessels.Count(v => v.Dark)),
+            Vessels: vessels,
+            SarOverlay: overlay,
+            Crops: crops));
     }
 
-    /// POST /api/scenes/sync — pulls every available JSON from the Jetson
-    /// (jetson_client.sh get-all). Returns every ship as-is, unlike GET
-    /// /api/scenes/{name} above -- would need the same dark-vessel filtering
-    /// applied if the frontend ever starts using this endpoint.
+    /// GET /api/scenes/{name}/raw — the detector's own JSON, normalised onto
+    /// meta+ships. This is what GET /api/scenes/{name} used to return.
+    [HttpGet("{name}/raw")]
+    public async Task<IActionResult> Raw(string name, CancellationToken ct)
+    {
+        if (!Validation.IsSafeName(name))
+            return BadRequest(new { error = "invalid scene name" });
+
+        var cached = await _catalog.GetSceneAsync(name, ct);
+        if (cached is null)
+            return NotFound(new { error = $"no scene '{name}' on the Jetson" });
+
+        return Content(cached.Normalized.ToJsonString(), "application/json");
+    }
+
+    /// GET /api/scenes/{name}/overview — the decimated whole-scene render.
+    [HttpGet("{name}/overview")]
+    public async Task<IActionResult> Overview(string name, CancellationToken ct)
+    {
+        if (!Validation.IsSafeName(name))
+            return BadRequest(new { error = "invalid scene name" });
+
+        var path = await _catalog.EnsureOverviewAsync(name, ct);
+        if (path is null)
+            return NotFound(new { error = $"scene '{name}' has no overview render" });
+
+        return PhysicalFile(path, "image/jpeg", enableRangeProcessing: true);
+    }
+
+    /// GET /api/scenes/{name}/crops — the water-crop manifest.
+    ///
+    /// ?full=true additionally pulls every full-resolution crop before
+    /// answering, which is tens of megabytes over the link; the default pulls
+    /// only the thumbnail tier.
+    [HttpGet("{name}/crops")]
+    public async Task<IActionResult> Crops(string name, [FromQuery] bool full, CancellationToken ct)
+    {
+        if (!Validation.IsSafeName(name))
+            return BadRequest(new { error = "invalid scene name" });
+
+        var manifest = await _catalog.EnsureCropsAsync(name, full, ct);
+        if (manifest is null)
+            return NotFound(new { error = $"scene '{name}' has no crops" });
+
+        // Rewrite the manifest's own relative paths into URLs this API serves,
+        // so a client never has to know how the files are laid out on disk.
+        var prefix = $"/api/scenes/{Uri.EscapeDataString(name)}/crops/";
+        if (manifest["crops"] is JsonArray crops)
+        {
+            foreach (var node in crops)
+            {
+                if (node is not JsonObject crop) continue;
+                if (crop["file"]?.GetValue<string>() is { } file)
+                    crop["file_url"] = prefix + file;
+                if (crop["thumb"]?.GetValue<string>() is { } thumb)
+                    crop["thumb_url"] = prefix + thumb;
+            }
+        }
+
+        return Content(manifest.ToJsonString(), "application/json");
+    }
+
+    /// GET /api/scenes/{name}/crops/{path} — one crop or thumbnail.
+    [HttpGet("{name}/crops/{**relative}")]
+    public IActionResult Crop(string name, string relative)
+    {
+        if (!Validation.IsSafeName(name))
+            return BadRequest(new { error = "invalid scene name" });
+
+        var path = _catalog.ResolveCropFile(name, relative);
+        if (path is null)
+            return NotFound(new { error = $"no crop '{relative}' for scene '{name}'" });
+
+        return PhysicalFile(path, "image/jpeg", enableRangeProcessing: true);
+    }
+
+    /// POST /api/scenes/sync — pull every available JSON from the Jetson.
     [HttpPost("sync")]
     public async Task<IActionResult> Sync(CancellationToken ct)
     {
@@ -127,8 +231,10 @@ public class ScenesController : ControllerBase
         return Ok(scenes);
     }
 
-    /// POST /api/scenes/available — list raw scene images on the Jetson that
-    /// haven't been processed yet (jetson_client.sh list-images)
+    /// POST /api/scenes/available — raw products on the Jetson not yet
+    /// processed. Includes .SAFE directories and .zip archives now that the
+    /// detector can take a raw L1 product, not only an already-terrain-
+    /// corrected GeoTIFF.
     [HttpPost("available")]
     public async Task<IActionResult> Available(CancellationToken ct)
     {
@@ -142,8 +248,9 @@ public class ScenesController : ControllerBase
         return Ok(names);
     }
 
-    /// POST /api/scenes/{name}/process — run detection for one raw image on
-    /// the Jetson (jetson_client.sh process NAME). Long-running.
+    /// POST /api/scenes/{name}/process — run detection for one raw product.
+    /// Long-running: a .SAFE also goes through calibration, thermal-noise
+    /// removal and range-Doppler geocoding on the Jetson's GPU first.
     [HttpPost("{name}/process")]
     public async Task<IActionResult> Process(string name, CancellationToken ct)
     {
@@ -154,6 +261,64 @@ public class ScenesController : ControllerBase
         if (result.ExitCode != 0)
             return StatusCode(502, new { ok = false, error = result.StdErr.Trim() });
 
+        // Whatever was cached for this name is now out of date.
+        var stem = Path.GetFileNameWithoutExtension(name);
+        _catalog.Forget(stem);
+        _catalog.Forget($"{stem}__cpp");
+
         return Ok(new { ok = true, message = result.StdOut.Trim() });
+    }
+
+    // ------------------------------------------------------------------ dark
+
+    /// The detection ids with no AIS match — the dark ones.
+    ///
+    /// Null when AIS matching is switched off or the scene has no usable
+    /// acquisition time, which the projector reads as "everything is dark".
+    /// That is the honest reading: with nothing to compare against, no vessel
+    /// has been ruled out. Reporting them all as safe would be the dangerous
+    /// direction to fail in.
+    private async Task<IReadOnlySet<string>?> ComputeDarkIdsAsync(
+        string name, JsonObject normalized, CancellationToken ct)
+    {
+        if (!_darkVessel.Enabled)
+            return null;
+
+        var meta = normalized["meta"] as JsonObject;
+        var ships = normalized["ships"] as JsonArray;
+        if (meta is null || ships is null)
+            return null;
+
+        if (!SceneNormalizer.TryGetAcquired(meta, out var acquiredUtc))
+        {
+            _logger.LogWarning(
+                "scene {Scene}: meta.acquired has no usable timestamp ({Raw}); "
+                + "reporting every detection as dark", name, meta["acquired"]?.GetValue<string>());
+            return null;
+        }
+
+        var detections = new List<ShipDetection>();
+        foreach (var node in ships)
+        {
+            if (node is not JsonObject ship) continue;
+            var lat = ship["latitude"]?.GetValue<double?>();
+            var lon = ship["longitude"]?.GetValue<double?>();
+            if (lat is null || lon is null) continue;
+            var id = ship["id"]?.GetValue<int>() ?? 0;
+            detections.Add(new ShipDetection($"{name}-{id}", lat.Value, lon.Value,
+                                             ship["heading"]?.GetValue<double?>()));
+        }
+
+        try
+        {
+            return await _darkVessel.FilterKeepAsync(detections, acquiredUtc, ct);
+        }
+        catch (Exception ex)
+        {
+            // A matching outage must not blank the map. Fail towards showing
+            // everything as dark rather than towards showing nothing.
+            _logger.LogError(ex, "dark-vessel match failed for {Scene}; reporting all as dark", name);
+            return null;
+        }
     }
 }

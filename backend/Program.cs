@@ -1,16 +1,22 @@
+using BaklavaBackend.Common;
 using BaklavaBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration.RequireAll(
+    "JetsonClient:ScriptPath",
+    "JetsonClient:DestDir");
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<JetsonClientService>();
+builder.Services.AddSingleton<SceneCatalogService>();
 builder.Services.AddHttpClient<DarkVesselMatchService>((sp, client) =>
 {
-    var config = sp.GetRequiredService<IConfiguration>();
-    client.BaseAddress = new Uri(config["DarkVessel:BaseUrl"]
-        ?? throw new InvalidOperationException("DarkVessel:BaseUrl is not configured"));
+    var baseUrl = sp.GetRequiredService<IConfiguration>()["DarkVessel:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+        client.BaseAddress = new Uri(baseUrl);
 });
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
