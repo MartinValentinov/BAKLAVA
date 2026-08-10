@@ -1,4 +1,3 @@
-/* PART 1 - THE ELEMENTS AND THE STATE */
 const mapBoard              = document.getElementById("mapBoard");
 
 const statsBar              = document.getElementById("statsBar");
@@ -30,7 +29,6 @@ const popupOverlay          = document.getElementById("popupOverlay");
 const popupMessage          = document.getElementById("popupMessage");
 const btnClosePopup         = document.getElementById("btnClosePopup");
 
-
 const loaderOverlay         = document.getElementById("loaderOverlay");
 const loaderText            = document.getElementById("loaderText");
 
@@ -50,15 +48,12 @@ let vesselDotsById      = new Map();
 let noticeHideTimer = null;
 let loaderShownAt   = 0;
 
-
 function paletteColor(variableName) {
     return getComputedStyle(document.documentElement)
         .getPropertyValue(variableName)
         .trim();
 }
 
-
-/* PART 2 - THE NOTIFICATION, THE POPUP AND THE LOADING ANIMATION */
 function notify(message, kind = "info", hideByItself = true) {
     clearTimeout(noticeHideTimer);
 
@@ -125,8 +120,6 @@ async function runWithLoader(job, message) {
     }
 }
 
-
-/* PART 3 - THE SIDEBAR */
 function openSidebar() {
     sidebar.classList.add("is-open");
     sidebarBackdrop.classList.remove("is-hidden");
@@ -137,8 +130,6 @@ function closeSidebar() {
     sidebarBackdrop.classList.add("is-hidden");
 }
 
-
-/* PART 4 - THE MAP */
 function initMap() {
     map = L.map("map", {
         zoomControl: true,
@@ -165,8 +156,6 @@ function focusMapOn(lat, lon, zoom = 8) {
     map.setView([lat, lon], zoom);
 }
 
-
-/* PART 5 - THE SCENES (THE BLUE BOXES) */
 async function loadSceneList() {
     if (cachedSceneList) {
         return cachedSceneList;
@@ -301,8 +290,6 @@ function closeScene(options = {}) {
     }
 }
 
-
-/* PART 6 - THE VESSELS AND THE "SHIP DETAILS" CARD */
 function setSceneControlsEnabled(enabled) {
     btnSarOverlay.disabled  = !enabled;
     switchDarkOnly.disabled = !enabled;
@@ -437,8 +424,6 @@ function formatCoordinate(value, positiveLetter, negativeLetter) {
     return `${Math.abs(value).toFixed(6)}° ${letter}`;
 }
 
-
-/* PART 7 - THE SAR OVERLAY */
 function setSarOverlay(on, options = {}) {
     sarOverlayLayer.clearLayers();
     btnSarOverlay.classList.toggle("is-active", on);
@@ -479,8 +464,6 @@ function setSarOverlay(on, options = {}) {
     }
 }
 
-
-/* PART 8 - CONNECTING THE CONTROLS */
 btnPickScene.addEventListener("click", () => {
     if (isPickingScene) {
         stopScenePicking();
@@ -508,15 +491,11 @@ btnOpenMenu.addEventListener("click", openSidebar);
 btnCloseMenu.addEventListener("click", closeSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
 
-<<<<<<< HEAD
 btnMenuScenes.addEventListener("click", closeSidebar);
 btnMenuDarkAlerts.addEventListener("click", () => {
     closeSidebar();
     showPopup("Under construction!");
 });
-=======
-btnSarScenes.addEventListener("click", closeSidebar);
->>>>>>> 432a56c (latest)
 
 btnClosePopup.addEventListener("click", hidePopup);
 popupOverlay.addEventListener("click", (event) => {
@@ -537,8 +516,6 @@ document.addEventListener("keydown", (event) => {
 
 notice.addEventListener("click", hideNotice);
 
-
-/* PART 9 - START-UP AND MANUAL TESTING */
 initMap();
 
 window.BAKLAVA = {

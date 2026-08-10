@@ -53,9 +53,6 @@ public class JetsonClientService
             CreateNoWindow = true,
         };
 
-        // Windows has no shebang support, so .sh scripts can't be launched
-        // directly (unlike macOS/Linux, where the OS reads the "#!" line).
-        // Run them through Git Bash instead.
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             psi.FileName = "bash";
@@ -68,19 +65,11 @@ public class JetsonClientService
         foreach (var a in args)
             psi.ArgumentList.Add(a);
 
-        // Single-source DestDir from config instead of the value hardcoded
-        // in jetson_client.sh, so the two can't silently drift apart.
         psi.EnvironmentVariables["BAKLAVA_DEST_DIR"] = DestDir.Replace('\\', '/');
 
-        // The listener daemon authenticates with a bearer token; jetson_client.sh
-        // reads it from BAKLAVA_TOKEN. Config wins so the backend works however
-        // it was launched, but a token already in this process's environment is
-        // left alone as the fallback.
         if (!string.IsNullOrWhiteSpace(_token))
             psi.EnvironmentVariables["BAKLAVA_TOKEN"] = _token;
 
-        // Which detector listener_service.py should run: "cpp" or "legacy".
-        // Unset leaves jetson_client.sh's own default in charge.
         if (!string.IsNullOrWhiteSpace(_backend))
             psi.EnvironmentVariables["BAKLAVA_BACKEND"] = _backend;
 

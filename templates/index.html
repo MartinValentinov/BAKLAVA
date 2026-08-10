@@ -18,7 +18,6 @@
 
 <body>
 
-<!-- BLOCK 1 - TOP BAR -->
 <header class="topbar">
 
     <div class="brand">
@@ -40,11 +39,8 @@
     </button>
 </header>
 
-
-<!-- BLOCK 2 - THE MAP BOARD -->
 <main class="map-board" id="mapBoard">
 
-    <!-- ----- BLOCK 2a - THE STATISTICS BAR ----- -->
     <div class="stats-bar is-hidden" id="statsBar">
         <span class="stats-bar__item">
             {{ settings.stat_total_label }} <b id="statTotalShips">0</b>
@@ -59,7 +55,6 @@
                 aria-label="Close this scene">&times;</button>
     </div>
 
-    <!-- ----- BLOCK 2b - THE MAP AND THE CARDS FLOATING OVER IT ----- -->
     <div class="map-board__map-area">
 
         <div id="map" class="map-board__map"></div>
@@ -79,7 +74,6 @@
         </aside>
     </div>
 
-    <!-- ----- BLOCK 2c - THE CONTROL BAR ----- -->
     <div class="controls">
 
         <button class="control-button" id="btnPickScene" aria-pressed="false"
@@ -111,8 +105,6 @@
     </div>
 </main>
 
-
-<!-- BLOCK 3 - SIDEBAR MENU -->
 <div class="sidebar-backdrop is-hidden" id="sidebarBackdrop"></div>
 
 <nav class="sidebar" id="sidebar">
@@ -126,8 +118,6 @@
     <button class="sidebar__btn" id="btnMenuDarkAlerts">Dark Vessel Alerts</button>
 </nav>
 
-
-<!-- BLOCK 4 - POPUP -->
 <div class="popup-overlay is-hidden" id="popupOverlay">
     <div class="popup">
         <p class="popup__message" id="popupMessage">Under construction!</p>
@@ -135,8 +125,6 @@
     </div>
 </div>
 
-
-<!-- BLOCK 5 - THE LOADING ANIMATION -->
 <div class="loader-overlay is-hidden" id="loaderOverlay"
      role="status" aria-live="polite" aria-busy="true">
     <div class="loader">
@@ -148,8 +136,6 @@
     </div>
 </div>
 
-
-<!-- BLOCK 6 - SETTINGS FROM app.py, AND THE PAGE LOGIC -->
 <script>
     const BAKLAVA_SETTINGS = {{ settings | tojson }};
 </script>

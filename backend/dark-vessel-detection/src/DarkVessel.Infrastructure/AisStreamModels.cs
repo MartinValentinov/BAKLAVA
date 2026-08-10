@@ -2,12 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace DarkVessel.Infrastructure;
 
-// Field names match aisstream.io's documented schema (confirmed against
-// aisstream_demo.ipynb for MetaData/PositionReport). Before relying on this
-// against a live feed, cross-check a real captured payload -- the PHP
-// collector logs the first raw payload of every session for exactly this
-// reason ("[link] first payload: ..."), and aisstream can revise its schema.
-
 public sealed class AisStreamEnvelope
 {
     [JsonPropertyName("MessageType")]
@@ -82,8 +76,6 @@ public sealed class ShipStaticData
 
 public sealed class ShipDimension
 {
-    // Distances from the GPS antenna to bow(A)/stern(B)/port(C)/starboard(D).
-    // length_m = A + B, width_m = C + D.
     [JsonPropertyName("A")]
     public double? A { get; set; }
 
@@ -97,7 +89,6 @@ public sealed class ShipDimension
     public double? D { get; set; }
 }
 
-/// <summary>The subscribe frame sent once, right after the WebSocket opens.</summary>
 public sealed class AisStreamSubscription
 {
     [JsonPropertyName("APIKey")]

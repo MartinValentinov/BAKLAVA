@@ -1,22 +1,5 @@
 namespace DarkVessel.Core;
 
-/// <summary>
-/// Cross-match onboard ship detections against the live AIS archive.
-///
-/// The onboard model reports a position and timestamp (and, where the modality
-/// allows it, a heading) for every detected vessel. This answers the one
-/// question that matters operationally: is there an AIS-reporting vessel close
-/// enough, in space and time, to explain the detection? If yes, the ship is
-/// transparent -- not dark. If no, and the archive was actually listening at
-/// that moment (see <see cref="IAisSource.HadCoverageAsync"/>), it's a dark vessel.
-///
-/// This is a simple distance+time gate, not a weighted score: a candidate only
-/// counts if it is within <c>matchDistanceKm</c> and <c>maxTimeGapSeconds</c> of
-/// the detection. That keeps the decision easy to explain to a coast guard
-/// reviewer who is not going to trust an opaque probability. Every candidate
-/// considered -- not just the winner -- is returned, so a human can see what
-/// almost matched before deciding whether a "dark" verdict is worth acting on.
-/// </summary>
 public static class Matcher
 {
     public static async Task<MatchResult> MatchDetectionAsync(
@@ -86,15 +69,6 @@ public static class Matcher
         return new MatchResult(detection.DetectionId, status, hadCoverage, best, candidates);
     }
 
-    /// <summary>
-    /// One vessel's position at <paramref name="when"/>.
-    ///
-    /// Linearly interpolated between the two AIS reports bracketing <paramref name="when"/>
-    /// if both exist (the collector stores one position per vessel per minute, so this
-    /// keeps a 14-knot vessel's true position within ~100 m of the interpolated one).
-    /// Falls back to the single nearest report -- with its real time gap reported --
-    /// when <paramref name="when"/> is outside the track's span.
-    /// </summary>
     private static (double Lat, double Lon, double GapSeconds) Interpolate(List<AisPosition> track, DateTime when)
     {
         var sorted = track.OrderBy(p => p.Ts).ToList();

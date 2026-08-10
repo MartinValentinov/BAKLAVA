@@ -1,58 +1,27 @@
-"""
-================================================================================
- BAKLAVA - builds the loading animation
-================================================================================
-Run this after changing any of the drawings in static/img/frame_*.svg:
-
-    python static/anim/build_loading_animation.py
-
-It rewrites static/anim/loading.svg next to this file. Nothing else in the app
-has to change - the page just picks up the new file.
-
-WHAT IT DOES
-Each frame_*.svg is a full A4 page from Inkscape whose drawing sits in a small
-patch in the middle. For every frame this script takes the drawing out, throws
-away the Inkscape bookkeeping (guides, layer names, ids), and stacks all eight
-of them inside ONE svg, cropped down to the drawing itself. A small stylesheet
-written into that svg then shows one frame at a time, which is what makes it
-move without any JavaScript.
-
-Only the standard library is needed - there is nothing to install.
-"""
 import re
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent          # static/anim/
-IMG = HERE.parent / "img"                       # static/img/
+HERE = Path(__file__).resolve().parent
+IMG = HERE.parent / "img"
 OUT = HERE / "loading.svg"
 
-# The cycle: the finished mark, rubbed out, drawn back in, and round again.
-# frame_0_8 is both the first and the last frame, hence its name.
 ORDER = ["frame_0_8", "frame_1", "frame_2", "frame_3",
          "frame_4", "frame_5", "frame_6", "frame_7"]
 
-# The window onto the A4 page: "x y width height". The drawing occupies
-# x 66.4..141.0 and y 107.4..233.3, so this is it with a little air around it.
-# Redraw the mark somewhere else on the page and this needs adjusting - in
-# Inkscape, Edit > Select All then read the X/Y/W/H boxes in the toolbar.
 VIEWBOX = "64 105 79 130"
 WIDTH, HEIGHT = 79, 130
 
-FRAME_MS = 150                                  # how long one frame is on screen
-CYCLE_S = len(ORDER) * FRAME_MS / 1000          # ...and one full round
-SWITCH_MS = CYCLE_S                             # the 12.4% -> 12.5% gap, in ms
+FRAME_MS = 150
+CYCLE_S = len(ORDER) * FRAME_MS / 1000
+SWITCH_MS = CYCLE_S
 
 
 def drawing_of(name):
-    """Returns the drawing of one frame: everything after <defs>, cleaned up."""
     text = (IMG / f"{name}.svg").read_text(encoding="utf-8")
 
-    # Inkscape writes <defs> self-closing, so accept either ending.
     defs = re.search(r"<defs\b.*?(?:/>|</defs>)", text, re.S)
     body = text[defs.end():].rsplit("</svg>", 1)[0]
 
-    # Inkscape-only attributes mean nothing to a browser, and the same id
-    # repeated eight times in one file is invalid - both go.
     body = re.sub(r'\s+(?:inkscape|sodipodi):[\w-]+="[^"]*"', "", body)
     body = re.sub(r'\s+id="[^"]*"', "", body)
     body = re.sub(r"\n\s*\n", "\n", body)
@@ -61,10 +30,6 @@ def drawing_of(name):
                      for line in body.splitlines() if line.strip())
 
 
-# Every frame carries two class names: "frame" for what they all share, and
-# "fN" for its turn in the queue. The delay rules are therefore written
-# ".frame.fN" - as plain ".fN" the shared rule would outweigh them (it names an
-# element as well as a class) and all eight frames would flash at once.
 delays = "\n".join(
     f"    .frame.f{i} {{ animation-delay: {i * FRAME_MS / 1000:.3f}s; }}"
     for i in range(len(ORDER))

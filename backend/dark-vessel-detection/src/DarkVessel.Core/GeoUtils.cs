@@ -1,11 +1,9 @@
 namespace DarkVessel.Core;
 
-/// <summary>Geodesy helpers for AIS cross-matching.</summary>
 public static class GeoUtils
 {
     private const double EarthRadiusKm = 6371.0088;
 
-    /// <summary>Great-circle distance between two lat/lon points, in kilometers.</summary>
     public static double HaversineKm(double lat1, double lon1, double lat2, double lon2)
     {
         double phi1 = DegreesToRadians(lat1);
@@ -21,12 +19,6 @@ public static class GeoUtils
 
     private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
 
-    /// <summary>
-    /// A rectangle guaranteed to contain every point within <paramref name="radiusKm"/>
-    /// of (lat, lon) -- a cheap prefilter for a data source that can only filter by
-    /// bounding box, not by true radius. Callers still need to apply <see cref="HaversineKm"/>
-    /// themselves afterward for the exact distance.
-    /// </summary>
     public static (double LatLo, double LatHi, double LonLo, double LonHi) BoundingBox(
         double lat, double lon, double radiusKm)
     {

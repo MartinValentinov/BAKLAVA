@@ -4,22 +4,6 @@ using MySqlConnector;
 
 namespace DarkVessel.Infrastructure;
 
-/// <summary>
-/// Reads and writes the exact MySQL tables the original PHP collector
-/// (ais_web/lib/store.php) used: ais_positions, vessels, ais_coverage.
-/// No schema changes needed to reuse an existing database.
-///
-/// Implements <see cref="IAisSource"/> (the read side, used by Matcher) and
-/// also carries the write side (used by the collector) -- unlike the
-/// PHP/Python split, one process here can own both, since it's all one app now.
-///
-/// NOT currently wired into Program.cs: this needs a direct connection to
-/// MySQL (port 3306), which is not reachable from outside the hosting server
-/// -- see HttpAisSource for the backend actually in use, which goes through
-/// the Baklava HTTP API instead. Kept here for if/when direct MySQL access
-/// becomes available (an SSH tunnel, a better hosting plan, etc.) -- swapping
-/// back only means changing what's registered for IAisSource in Program.cs.
-/// </summary>
 public sealed class AisStore : IAisSource
 {
     private readonly string _connectionString;
@@ -32,8 +16,6 @@ public sealed class AisStore : IAisSource
         await conn.OpenAsync(ct).ConfigureAwait(false);
         return conn;
     }
-
-    // -- IAisSource (read side, used by Matcher) -----------------------------
 
     public async Task<IReadOnlyList<AisPosition>> CandidatesNearAsync(
         double lat, double lon, DateTime when, double windowMinutes, double radiusKm,
@@ -85,8 +67,6 @@ public sealed class AisStore : IAisSource
 
     private sealed record PositionRow(long mmsi, DateTime ts, double lat, double lon, double? sog, double? cog, double? heading);
 
-    // -- coverage ledger (write side, used by the collector) -----------------
-
     public async Task<long> OpenCoverageAsync(string bboxesJson, string host, CancellationToken ct = default)
     {
         const string sql = """
@@ -128,10 +108,6 @@ public sealed class AisStore : IAisSource
         ).ConfigureAwait(false);
     }
 
-    // -- positions & vessels (write side, used by the collector) -------------
-
-    /// <summary>INSERT IGNORE against (mmsi, ts) -- the per-minute downsampling is
-    /// enforced by the DATABASE, so a restart or a duplicate run can't duplicate a row.</summary>
     public async Task<int> InsertPositionsAsync(IReadOnlyList<PositionWrite> rows, CancellationToken ct = default)
     {
         if (rows.Count == 0)
@@ -176,8 +152,6 @@ public sealed class AisStore : IAisSource
             await conn.ExecuteAsync(new CommandDefinition(sql, chunk, cancellationToken: ct)).ConfigureAwait(false);
         }
     }
-
-    // -- dashboard/status -----------------------------------------------------
 
     public async Task<ArchiveStats> ArchiveStatsAsync(CancellationToken ct = default)
     {

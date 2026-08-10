@@ -1,4 +1,3 @@
-/* A - THE STATISTICS BAR */
 .stats-bar {
     flex-shrink: 0;
     display: flex;
@@ -60,8 +59,6 @@
     background: rgba(255, 255, 255, 0.18);
 }
 
-
-/* B - THE CONTROL BAR */
 .controls {
     flex-shrink: 0;
     display: flex;
@@ -75,7 +72,6 @@
     border-top: 1px solid rgba(31, 39, 27, 0.18);
 }
 
-/* ----- B1 - THE TWO ROUND BUTTONS ----- */
 .control-button {
     display: inline-flex;
     align-items: center;
@@ -128,7 +124,6 @@
     cursor: not-allowed;
 }
 
-/* ----- B2 - THE DARK VESSELS SWITCH ----- */
 .switch-group {
     margin-left: auto;
     display: flex;
@@ -193,8 +188,6 @@
     background: rgba(31, 39, 27, 0.35);
 }
 
-
-/* C - THE "SHIP DETAILS" CARD */
 .ship-card {
     position: absolute;
     top: 14px;
@@ -294,8 +287,6 @@
     overflow-wrap: anywhere;
 }
 
-
-/* D - THE NOTIFICATION */
 .notice {
     position: absolute;
     top: 14px;
@@ -357,8 +348,6 @@
     to   { opacity: 1; transform: translateY(0);    }
 }
 
-
-/* E - THE MAP */
 .control-button:focus-visible,
 .switch:focus-visible,
 .hamburger:focus-visible,
@@ -391,8 +380,6 @@
     margin: 10px 14px;
 }
 
-
-/* F - THE LOADING ANIMATION */
 .loader-overlay {
     position: fixed;
     inset: 0;
@@ -442,8 +429,6 @@
     display: none;
 }
 
-
-/* G - SMALL SCREENS */
 @media (max-width: 720px) {
     .stats-bar {
         gap: 16px;

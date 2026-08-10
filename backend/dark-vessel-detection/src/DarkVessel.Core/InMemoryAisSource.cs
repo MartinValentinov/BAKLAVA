@@ -1,14 +1,9 @@
 namespace DarkVessel.Core;
 
-/// <summary>
-/// AISSource backed by plain lists. Used by the test suite, and equally usable
-/// for an offline batch run over a JSONL/CSV export instead of a live database.
-/// </summary>
 public sealed class InMemoryAisSource : IAisSource
 {
     public List<AisPosition> Positions { get; } = new();
 
-    /// <summary>(startedAt, endedAt) windows, both UTC.</summary>
     public List<(DateTime StartedAt, DateTime EndedAt)> Coverage { get; } = new();
 
     public Task<IReadOnlyList<AisPosition>> CandidatesNearAsync(

@@ -6,11 +6,6 @@ public enum DesiredState
     Running,
 }
 
-/// <summary>
-/// Shared, in-process status the collector writes and the API reads --
-/// the .NET equivalent of PHP's runtime/state.json, except there's no file
-/// and no separate process: both sides are the same app now.
-/// </summary>
 public sealed class CollectorState
 {
     private readonly object _lock = new();

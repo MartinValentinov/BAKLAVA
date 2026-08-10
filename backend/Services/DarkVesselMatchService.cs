@@ -3,14 +3,6 @@ using System.Text.Json.Serialization;
 
 namespace BaklavaBackend.Services;
 
-/// <summary>
-/// Calls the separate DarkVessel.Api service (cross-references an onboard
-/// detection against the AIS archive) to decide whether a detected ship is
-/// a "dark vessel" -- see that project's API_REFERENCE.md. Field names are
-/// explicit camelCase via [JsonPropertyName] rather than relying on default
-/// JsonSerializerOptions, since a silent casing mismatch here would make
-/// every ship read as "not dark" with no error anywhere.
-/// </summary>
 public sealed record MatchRequestDto(
     [property: JsonPropertyName("detectionId")] string DetectionId,
     [property: JsonPropertyName("lat")] double Lat,
@@ -35,10 +27,6 @@ public class DarkVesselMatchService
     private readonly int _maxConcurrentMatches;
     private readonly ILogger<DarkVesselMatchService> _logger;
 
-    /// False when DarkVessel:BaseUrl or DarkVessel:ApiKey is unset. The
-    /// integration is optional: without it scenes come back with every
-    /// detected ship instead of only the dark ones, rather than the whole
-    /// ScenesController failing to construct.
     public bool Enabled { get; }
 
     public DarkVesselMatchService(HttpClient http, IConfiguration config, ILogger<DarkVesselMatchService> logger)
@@ -67,7 +55,6 @@ public class DarkVesselMatchService
                 "DarkVessel is not configured; check Enabled before calling this");
     }
 
-    /// Raw MatchStatus from DarkVessel.Api: "Matched", "Dark" or "UnknownNoCoverage".
     public async Task<string> MatchStatusAsync(string detectionId, double lat, double lon, DateTime timestampUtc, double? headingDeg, CancellationToken ct)
     {
         EnsureEnabled();
@@ -86,22 +73,6 @@ public class DarkVesselMatchService
         return result.Status;
     }
 
-    /// <summary>
-    /// Matches many ships concurrently, bounded by DarkVessel:MaxConcurrentMatches
-    /// (default 8) -- each call fans out to two further HTTP calls inside
-    /// DarkVessel.Api, so an unbounded Task.WhenAll over a whole scene isn't safe.
-    ///
-    /// Returns the DetectionIds worth showing: everything except "Matched".
-    ///
-    /// Only "Matched" is a positive identification -- the vessel was found in the
-    /// AIS archive, so it is cooperative and not of interest. "Dark" and
-    /// "UnknownNoCoverage" are both kept, and they are NOT the same thing:
-    /// "Dark" means AIS was being recorded there and then and this ship was
-    /// absent; "UnknownNoCoverage" means nobody was listening, so nothing can be
-    /// concluded. Dropping the unknowns would silently hide real contacts
-    /// whenever AIS coverage has a hole -- which, until a coverage resource
-    /// exists on writers.php, is every scene.
-    /// </summary>
     public async Task<HashSet<string>> FilterKeepAsync(IReadOnlyList<ShipDetection> ships, DateTime timestampUtc, CancellationToken ct)
     {
         EnsureEnabled();

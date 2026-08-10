@@ -8,24 +8,6 @@ using Microsoft.Extensions.Options;
 
 namespace DarkVessel.Infrastructure;
 
-/// <summary>
-/// Live AIS collector -- the .NET replacement for collector.php + lib/websocket.php.
-///
-/// Runs for the lifetime of this process as a hosted BackgroundService: connects to
-/// aisstream.io over a WebSocket (built into .NET, unlike PHP which had to hand-roll
-/// lib/websocket.php), buffers position reports downsampled to one row per vessel
-/// per minute, and flushes them out periodically via <see cref="HttpAisSource"/>
-/// (the Baklava HTTP API -- MySQL's own port isn't reachable from outside the
-/// hosting server, but this API is). Swapping back to a direct <see cref="AisStore"/>
-/// connection later, if one becomes reachable, only means changing this constructor's
-/// parameter type -- both expose the same InsertPositionsAsync/UpsertVesselsAsync/
-/// coverage methods.
-///
-/// Unlike the PHP version, this needs no cron watchdog: as long as whatever runs
-/// this process (a Windows Service, a systemd unit, a container with a restart
-/// policy) keeps the *process* alive, this loop reconnects on its own -- there's
-/// no separate "collector died, cron notices within a minute" gap to design around.
-/// </summary>
 public sealed class AisStreamCollectorService : BackgroundService
 {
     private readonly HttpAisSource _store;
@@ -46,10 +28,6 @@ public sealed class AisStreamCollectorService : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Mirrors control.php flipping runtime/state.json's `desired` flag: this
-            // service is always alive (hosted by the app), but only actually opens a
-            // socket while someone has asked it to run -- same on/off button, no
-            // separate process to spawn or a cron watchdog to bring it back.
             if (_state.Snapshot().Desired != DesiredState.Running)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken).ConfigureAwait(false);
@@ -76,7 +54,6 @@ public sealed class AisStreamCollectorService : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // normal shutdown
             }
             catch (Exception ex)
             {
@@ -143,7 +120,7 @@ public sealed class AisStreamCollectorService : BackgroundService
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                json = null; // just a receive timeout, used below to check idle/flush timers
+                json = null;
             }
 
             if (json is not null)
@@ -210,7 +187,7 @@ public sealed class AisStreamCollectorService : BackgroundService
         }
         catch (JsonException)
         {
-            return; // malformed frame -- skip rather than crash the session over one bad message
+            return;
         }
         if (envelope?.MetaData is null)
         {
@@ -222,7 +199,6 @@ public sealed class AisStreamCollectorService : BackgroundService
 
         if (envelope.MessageType == "PositionReport" && envelope.Message?.PositionReport is { } report)
         {
-            // AIS "not available" sentinels -- store as NULL, not as numbers that look real.
             double? sog = report.Sog is >= 102.3 ? null : report.Sog;
             double? cog = report.Cog is >= 360 ? null : report.Cog;
             double? heading = report.TrueHeading is 511 ? null : report.TrueHeading;

@@ -5,12 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BaklavaBackend.Controllers;
 
-/// The API the map frontend (new_frontend/) talks to.
-///
-/// GET /api/scenes and GET /api/scenes/{name} answer in the shape that
-/// frontend expects - see new_frontend/README.md, "Backend contract". The
-/// detector's own format is still available under /raw for anything that wants
-/// it, and the pre-existing sync/available/process endpoints are unchanged.
 [ApiController]
 [Route("api/scenes")]
 public class ScenesController : ControllerBase
@@ -29,13 +23,6 @@ public class ScenesController : ControllerBase
         _logger = logger;
     }
 
-    /// GET /api/scenes — the blue boxes on the map.
-    ///
-    /// Every scene has to carry its footprint, and a footprint only exists
-    /// inside that scene's own JSON, so this reads each one. They are cached
-    /// after the first call (SceneCatalogService), and a scene that cannot be
-    /// read is skipped rather than failing the whole list - one bad scene
-    /// should not empty the picker.
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
@@ -68,10 +55,6 @@ public class ScenesController : ControllerBase
                 continue;
             }
 
-            // Authoritative only once the overview has actually been fetched.
-            // Until then the cpp backend is assumed to have produced one,
-            // because run.sh and the container service both enable it by
-            // default; GET /api/scenes/{name} settles it for real.
             var hasSar = System.IO.File.Exists(_catalog.OverviewPath(name))
                          || cached.Raw is not null;
 
@@ -85,7 +68,6 @@ public class ScenesController : ControllerBase
         return Ok(new SceneListResponse(scenes));
     }
 
-    /// GET /api/scenes/{name} — one scene with its vessels, in frontend shape.
     [HttpGet("{name}")]
     public async Task<IActionResult> Get(string name, CancellationToken ct)
     {
@@ -103,16 +85,11 @@ public class ScenesController : ControllerBase
         var darkIds = await ComputeDarkIdsAsync(name, cached.Normalized, ct);
         var vessels = SceneProjector.Vessels(name, cached.Normalized, darkIds);
 
-        // The overview render is the SAR overlay. It is pulled lazily: it is a
-        // few hundred kB per scene and only wanted when a scene is opened.
         SarOverlay? overlay = null;
         var overviewPath = await _catalog.EnsureOverviewAsync(name, ct);
         if (overviewPath is not null)
             overlay = new SarOverlay($"/api/scenes/{Uri.EscapeDataString(name)}/overview", corners);
 
-        // The crop manifest, if the detector produced one. Only the thumbnail
-        // tier is pulled here; the full-resolution crops are a separate,
-        // explicit request.
         CropSummary? crops = null;
         var manifest = await _catalog.EnsureCropsAsync(name, full: false, ct);
         if (manifest is not null)
@@ -136,8 +113,6 @@ public class ScenesController : ControllerBase
             Crops: crops));
     }
 
-    /// GET /api/scenes/{name}/raw — the detector's own JSON, normalised onto
-    /// meta+ships. This is what GET /api/scenes/{name} used to return.
     [HttpGet("{name}/raw")]
     public async Task<IActionResult> Raw(string name, CancellationToken ct)
     {
@@ -151,7 +126,6 @@ public class ScenesController : ControllerBase
         return Content(cached.Normalized.ToJsonString(), "application/json");
     }
 
-    /// GET /api/scenes/{name}/overview — the decimated whole-scene render.
     [HttpGet("{name}/overview")]
     public async Task<IActionResult> Overview(string name, CancellationToken ct)
     {
@@ -165,11 +139,6 @@ public class ScenesController : ControllerBase
         return PhysicalFile(path, "image/jpeg", enableRangeProcessing: true);
     }
 
-    /// GET /api/scenes/{name}/crops — the water-crop manifest.
-    ///
-    /// ?full=true additionally pulls every full-resolution crop before
-    /// answering, which is tens of megabytes over the link; the default pulls
-    /// only the thumbnail tier.
     [HttpGet("{name}/crops")]
     public async Task<IActionResult> Crops(string name, [FromQuery] bool full, CancellationToken ct)
     {
@@ -180,8 +149,6 @@ public class ScenesController : ControllerBase
         if (manifest is null)
             return NotFound(new { error = $"scene '{name}' has no crops" });
 
-        // Rewrite the manifest's own relative paths into URLs this API serves,
-        // so a client never has to know how the files are laid out on disk.
         var prefix = $"/api/scenes/{Uri.EscapeDataString(name)}/crops/";
         if (manifest["crops"] is JsonArray crops)
         {
@@ -198,7 +165,6 @@ public class ScenesController : ControllerBase
         return Content(manifest.ToJsonString(), "application/json");
     }
 
-    /// GET /api/scenes/{name}/crops/{path} — one crop or thumbnail.
     [HttpGet("{name}/crops/{**relative}")]
     public IActionResult Crop(string name, string relative)
     {
@@ -212,7 +178,6 @@ public class ScenesController : ControllerBase
         return PhysicalFile(path, "image/jpeg", enableRangeProcessing: true);
     }
 
-    /// POST /api/scenes/sync — pull every available JSON from the Jetson.
     [HttpPost("sync")]
     public async Task<IActionResult> Sync(CancellationToken ct)
     {
@@ -231,10 +196,6 @@ public class ScenesController : ControllerBase
         return Ok(scenes);
     }
 
-    /// POST /api/scenes/available — raw products on the Jetson not yet
-    /// processed. Includes .SAFE directories and .zip archives now that the
-    /// detector can take a raw L1 product, not only an already-terrain-
-    /// corrected GeoTIFF.
     [HttpPost("available")]
     public async Task<IActionResult> Available(CancellationToken ct)
     {
@@ -248,9 +209,6 @@ public class ScenesController : ControllerBase
         return Ok(names);
     }
 
-    /// POST /api/scenes/{name}/process — run detection for one raw product.
-    /// Long-running: a .SAFE also goes through calibration, thermal-noise
-    /// removal and range-Doppler geocoding on the Jetson's GPU first.
     [HttpPost("{name}/process")]
     public async Task<IActionResult> Process(string name, CancellationToken ct)
     {
@@ -261,7 +219,6 @@ public class ScenesController : ControllerBase
         if (result.ExitCode != 0)
             return StatusCode(502, new { ok = false, error = result.StdErr.Trim() });
 
-        // Whatever was cached for this name is now out of date.
         var stem = Path.GetFileNameWithoutExtension(name);
         _catalog.Forget(stem);
         _catalog.Forget($"{stem}__cpp");
@@ -269,15 +226,6 @@ public class ScenesController : ControllerBase
         return Ok(new { ok = true, message = result.StdOut.Trim() });
     }
 
-    // ------------------------------------------------------------------ dark
-
-    /// The detection ids with no AIS match — the dark ones.
-    ///
-    /// Null when AIS matching is switched off or the scene has no usable
-    /// acquisition time, which the projector reads as "everything is dark".
-    /// That is the honest reading: with nothing to compare against, no vessel
-    /// has been ruled out. Reporting them all as safe would be the dangerous
-    /// direction to fail in.
     private async Task<IReadOnlySet<string>?> ComputeDarkIdsAsync(
         string name, JsonObject normalized, CancellationToken ct)
     {
@@ -315,8 +263,6 @@ public class ScenesController : ControllerBase
         }
         catch (Exception ex)
         {
-            // A matching outage must not blank the map. Fail towards showing
-            // everything as dark rather than towards showing nothing.
             _logger.LogError(ex, "dark-vessel match failed for {Scene}; reporting all as dark", name);
             return null;
         }

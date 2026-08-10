@@ -16,8 +16,6 @@ public class CoordsController : ControllerBase
         _client = client;
     }
 
-    /// POST /api/coords?name=optional_name
-    /// jetson_client.sh send-coords, which validates and forwards it.
     [HttpPost]
     public async Task<IActionResult> Send([FromQuery] string? name, CancellationToken ct)
     {

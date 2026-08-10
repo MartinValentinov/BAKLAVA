@@ -4,30 +4,16 @@ using System.Text.Json.Nodes;
 
 namespace BaklavaBackend.Common;
 
-/// Brings both scene formats the Jetson can emit onto one shape - meta + ships -
-/// so the dark-vessel filter and the frontend only ever deal with one.
-///
-///   legacy  txt_to_json.py       meta{...} + ships[{id,conf,latitude,longitude,
-///                                heading,length_m,width_m,col_px,row_px}]
-///   cpp     yolov8s-obb-cpp      scene, acquisition_time, detection_count,
-///                                detections[{confidence,center{lon,lat},
-///                                heading_deg,length_m,width_m,corners_pixel}]
-///
-/// listener_service.py writes the cpp result under a __cpp.json name and tags it
-/// "backend": "yolov8s-obb-cpp", so both can sit in the outbox at once.
 public static partial class SceneNormalizer
 {
     [GeneratedRegex(@"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?")]
     private static partial Regex IsoStamp();
 
-    /// True when the object is already legacy-shaped.
     public static bool IsLegacy(JsonObject root) =>
         root["meta"] is JsonObject && root["ships"] is JsonArray;
 
-    /// True when the object is the cpp backend's shape.
     public static bool IsCpp(JsonObject root) => root["detections"] is JsonArray;
 
-    /// cpp shape -> legacy shape. Returns the input untouched if it is not cpp.
     public static JsonObject Normalize(JsonObject root)
     {
         if (!IsCpp(root))
@@ -41,8 +27,6 @@ public static partial class SceneNormalizer
             var d = detections[i]!.AsObject();
             var centre = d["center"]?.AsObject();
 
-            // corners_pixel is four [x,y] corners; the frontend wants one point,
-            // so use their centroid. Absent on some outputs, hence the null.
             double? colPx = null, rowPx = null;
             if (d["corners_pixel"] is JsonArray corners && corners.Count > 0)
             {
@@ -58,9 +42,6 @@ public static partial class SceneNormalizer
 
             ships.Add(new JsonObject
             {
-                // cpp detections carry no id of their own; position in the list
-                // is the only stable handle, and it is what the detection ids
-                // sent to DarkVessel.Api are built from.
                 ["id"] = i + 1,
                 ["conf"] = d["confidence"]?.GetValue<double>(),
                 ["longitude"] = centre?["lon"]?.GetValue<double>(),
@@ -86,14 +67,6 @@ public static partial class SceneNormalizer
         };
     }
 
-    /// The acquisition time out of meta.acquired.
-    ///
-    /// detect_ships.py writes provenance into that field rather than a bare
-    /// timestamp - "2026-08-07T04:13:08Z  (from scene filename)", or
-    /// "unknown - name the gpt output after..." when it could not find one. So
-    /// the whole string never parses; the leading ISO stamp is pulled out
-    /// instead, and a scene with no timestamp at all returns false rather than
-    /// failing the request.
     public static bool TryGetAcquired(JsonObject meta, out DateTime acquiredUtc)
     {
         acquiredUtc = default;
