@@ -1,27 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
-<!-- The drawing was made on an A4 page (210x297mm) but only occupies a small
-     patch in the middle of it. Shown at any size, most of the picture was
-     therefore empty margin and the mark itself came out tiny.
-
-     The viewBox below crops the page down to the drawing: "64 105 79 130"
-     means "show the rectangle starting at x=64, y=105, 79 wide and 130 tall".
-     Not one line of the artwork was moved - only the window onto it changed,
-     so the file still opens in Inkscape exactly as before.
-
-     How big it appears in the page is set by the logo-size variable at the
-     top of css/style.css. -->
-
-
 <svg
-   width="79"
-   height="130"
-   viewBox="64 105 79 130"
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
    version="1.1"
    id="svg5"
    inkscape:version="1.1.1 (3bf5ae0d25, 2021-09-20)"
-   sodipodi:docname="logo.svg"
+   sodipodi:docname="frame_2.svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -153,27 +140,6 @@
      id="layer2"
      inkscape:label="Layer 2"
      style="display:inline">
-    <path
-       style="fill:#ffdfbb;fill-opacity:1;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 107,173.00001 18.28609,-18.28608 v -46.6933"
-       id="path1177" />
-    <path
-       style="fill:#ffdfbb;fill-opacity:1;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="M 125.28609,108.02063 107,126.30671 V 173"
-       id="path1177-3" />
-    <g
-       id="g2688"
-       transform="rotate(-45,189.69206,180.44161)"
-       style="fill:#ffdfbb;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:1.2;stroke-miterlimit:4;stroke-dasharray:none">
-      <path
-         style="fill:#ffdfbb;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;fill-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-         d="M 131.53221,111.75773 149.8183,93.471652 V 46.77835"
-         id="path1177-0" />
-    </g>
-    <path
-       style="fill:#ffdfbb;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;fill-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 66.982867,114.12244 v 25.86044 L 100,173.00001"
-       id="path1177-3-1" />
     <g
        id="g77338"
        transform="translate(-2.6238654e-7,3.0000003)"
@@ -188,28 +154,12 @@
        d="M 100,229.6933 81.71391,214.4254 v -46.69329"
        id="path1177-3-6" />
     <path
-       style="fill:#b0ac68;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;fill-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 66.982866,139.98288 c 0,0 0,2.8067 0,2.8067 0,0 33.017131,33.01713 33.017131,33.01713 V 173"
-       id="path76212" />
-    <path
-       style="fill:#b0ac68;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;fill-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 107,173 v 2.80671 l 18.28609,-18.28609 v -2.88719"
-       id="path76350" />
-    <path
        style="fill:#b0ac68;fill-opacity:1;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
        d="m 81.713908,214.4254 v 3 l 18.286089,15.2679 v -3"
        id="path76648" />
     <g
        id="g1111"
        style="display:inline;stroke:#000000;stroke-opacity:1;stroke-width:0.8;stroke-miterlimit:4;stroke-dasharray:none" />
-    <path
-       style="fill:none;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="M 66.982866,139.98288 100,173.00001"
-       id="path951" />
-    <path
-       style="fill:none;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 107,173.00001 18.28609,-18.28608"
-       id="path953" />
     <path
        style="fill:none;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
        d="m 81.713908,214.4254 c -0.172382,-0.63694 -0.172382,-0.63694 0,0"
@@ -241,13 +191,5 @@
        style="display:inline;fill:#b0ac68;fill-opacity:1;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
        d="m 88.741967,203.62402 c 0,0 1.74553,3.93069 3.34966,0 1.60413,-3.93069 -1.67483,-8.7713 -1.67483,-8.7713 0,0 -2.17525,4.89328 -1.67483,8.7713 z"
        id="path76829-8" />
-    <path
-       style="display:inline;fill:#b0ac68;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;fill-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 114.32517,148.51896 c 0,0 1.74553,3.93069 3.34966,0 1.60413,-3.93069 -1.67483,-8.7713 -1.67483,-8.7713 0,0 -2.17525,4.89328 -1.67483,8.7713 z"
-       id="path76829" />
-    <path
-       style="display:inline;fill:#b0ac68;stroke:#000000;stroke-width:1.2;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;fill-opacity:1;stroke-miterlimit:4;stroke-dasharray:none"
-       d="m 86.840263,150.1761 c 0,0 4.013699,1.54515 2.368568,-2.36857 -1.645126,-3.9137 -7.386528,-5.01795 -7.386528,-5.01795 0,0 1.921937,4.9982 5.01796,7.38652 z"
-       id="path76829-9" />
   </g>
 </svg>

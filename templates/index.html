@@ -1,26 +1,74 @@
 <!DOCTYPE html>
+<!--
+================================================================================
+ BAKLAVA - page structure
+================================================================================
+ This file describes WHAT is on the page (map, controls, cards).
+ It does NOT describe how it looks (that is static/css/style.css + ui.css)
+ and it does NOT describe what happens on click (that is static/js/baklava.js).
+
+ The double-curly-brace placeholders are filled in by Flask from the
+ APP_SETTINGS dictionary in app.py before sending the page to the browser.
+ So to change a word on screen, edit app.py - not this file.
+
+ THE LAYOUT IN ONE PARAGRAPH
+ ---------------------------
+ A header bar at the top (logo + name on the left, hamburger on the right).
+ Under it, the map - and nothing else. The map board has three parts:
+
+     TOP     the statistics bar. Hidden until a scene is selected, then it
+             says how many ships and how many dark vessels it holds.
+     MIDDLE  the map itself, with two things floating over it: the small
+             notification (top left) and the "Ship details" card (top right,
+             only after a vessel is clicked).
+     BOTTOM  the controls, always there:
+               - the SELECT button (pencil)  -> show the blue scene boxes
+               - the SAR button (layers)     -> lay the radar picture over it
+               - the DARK VESSELS switch     -> dark vessels vs "safe" ships
+
+ Plus three things that sit on top of everything and are hidden by default:
+     the right-hand sidebar, the small popup, and the loading animation.
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ settings.project_title }}</title>
 
+    <!-- Leaflet: the free map library that draws the embedded map.
+         It is loaded from the internet (CDN), so you need a connection the
+         first time. To work offline, download these two files and point the
+         links at static/ instead. -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+    <!-- Fonts. Change these two families in style.css if you prefer others. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 
+    <!-- Our own stylesheets. url_for('static', ...) is just Flask's way of
+         writing the path /static/css/style.css
+         style.css = the base (colours, layout, the map board)
+         ui.css    = the polished components on top of it (the round control
+                     buttons, the switch, the cards). It is loaded SECOND on
+                     purpose: when two rules collide, the later file wins. -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
 </head>
 
 <body>
 
+<!-- ==========================================================================
+     BLOCK 1 - TOP BAR (logo + title on the left, hamburger on the right)
+     Always visible.
+     ========================================================================== -->
 <header class="topbar">
 
     <div class="brand">
+        <!-- The logo. The file it points at is set by "logo_path" in app.py.
+             onerror= means: if the image file is missing, hide it - the space
+             stays empty rather than showing a broken-image icon. -->
         <div class="brand__logo-box">
             <img class="brand__logo-img"
                  src="{{ url_for('static', filename=settings.logo_path) }}"
@@ -34,54 +82,128 @@
         </div>
     </div>
 
+    <!-- The hamburger. Opens the sidebar (BLOCK 3).
+         The three <span>s are the three lines; they are drawn by CSS. -->
     <button class="hamburger" id="btnHamburger" aria-label="Open menu">
         <span></span><span></span><span></span>
     </button>
 </header>
 
 
-<nav class="action-bar">
-    <button class="pill-btn" id="btnRequest">{{ settings.btn_request_label }}</button>
-    <button class="pill-btn" id="btnDownload">{{ settings.btn_download_label }}</button>
+<!-- ==========================================================================
+     BLOCK 2 - THE MAP BOARD (the whole interface)
 
-    <div class="notice is-hidden" id="notice" role="status" aria-live="polite">
-        <span class="notice__dot" aria-hidden="true"></span>
-        <span class="notice__text" id="noticeText"></span>
+     One rounded box holding, from top to bottom: the statistics bar, the map,
+     and the control bar. The notification and the ship card float over the map
+     rather than sitting in the flow, so nothing ever moves when they appear.
+     ========================================================================== -->
+<main class="board" id="board">
+
+    <!-- --- TOP: the statistics bar ------------------------------------------
+         Hidden until a scene is selected. The numbers are written by
+         JavaScript into the two <b> elements. The × on the right closes the
+         scene again and puts the map back to picking scenes. -->
+    <div class="stats-bar is-hidden" id="statsBar">
+        <span class="stats-bar__item">
+            {{ settings.stat_total_label }} <b id="statTotal">0</b>
+        </span>
+        <span class="stats-bar__item">
+            {{ settings.stat_dark_label }} <b id="statDark">0</b>
+        </span>
+
+        <!-- The scene name, pushed to the right and dropped on narrow screens. -->
+        <span class="stats-bar__scene" id="statScene"></span>
+
+        <button class="stats-bar__close" id="btnCloseScene"
+                aria-label="Close this scene">&times;</button>
     </div>
-</nav>
 
+    <!-- --- MIDDLE: the map, plus the two things floating over it ------------ -->
+    <div class="board__map-wrap">
 
-<main class="workspace">
+        <!-- Leaflet draws into this box. -->
+        <div id="map" class="board__map"></div>
 
-    <section class="map-panel" id="mapPanel">
-        <div id="map" class="map-panel__canvas"></div>
-    </section>
-
-    <aside class="side-panel">
-
-        <div class="side-view" id="catalogueView">
-            <h2 class="side-view__title">{{ settings.catalogue_title }}</h2>
-            <p class="side-view__hint" id="catalogueHint">{{ settings.catalogue_hint }}</p>
-            <ul class="scene-list" id="imageList"></ul>
+        <!-- The notification. One line at a time, top-left over the map.
+             role="status" and aria-live tell screen readers to announce it. -->
+        <div class="notice is-hidden" id="notice" role="status" aria-live="polite">
+            <span class="notice__dot" aria-hidden="true"></span>
+            <span class="notice__text" id="noticeText"></span>
         </div>
 
-        <div class="side-view is-hidden" id="detailsView">
-            <div class="side-view__head">
-                <button class="back-arrow" id="btnDetailsBack" aria-label="Back to the scene list">
-                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <polyline points="15 4 7 12 15 20"></polyline>
-                    </svg>
-                </button>
-                <h2 class="side-view__title">{{ settings.details_title }}</h2>
+        <!-- The "Ship details" card, top-right over the map. Hidden until a
+             vessel is clicked. The rows inside are built by JavaScript. -->
+        <aside class="ship-card is-hidden" id="shipCard">
+            <div class="ship-card__head">
+                <h2 class="ship-card__title">{{ settings.ship_details_title }}</h2>
+                <button class="ship-card__close" id="btnCloseShip"
+                        aria-label="Close the ship details">&times;</button>
             </div>
+            <dl class="ship-card__rows" id="shipRows"></dl>
+        </aside>
+    </div>
 
-            <textarea class="details-text" id="reportText" spellcheck="false"></textarea>
+    <!-- --- BOTTOM: the controls --------------------------------------------
+         Two round icon buttons on the left, the switch on the right.
+
+         Both icons are drawn as small SVGs rather than typed as characters, so
+         they look the same in every browser and stay sharp at any size.
+
+         aria-pressed="false" marks a button that can be ON or OFF; JavaScript
+         flips it together with the "is-active" class that colours it. -->
+    <div class="controls">
+
+        <!-- SELECT: shows the scenes as big see-through blue boxes. -->
+        <button class="ctl-btn" id="btnSelect" aria-pressed="false"
+                title="{{ settings.btn_select_title }}"
+                aria-label="{{ settings.btn_select_title }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z"></path>
+                <line x1="14.5" y1="7.5" x2="17.5" y2="10.5"></line>
+            </svg>
+        </button>
+
+        <!-- SAR: lays the radar picture of the selected scene over the map.
+
+             It starts DISABLED, because there is nothing to lay a picture over
+             until a scene is selected. "disabled" is the real HTML attribute,
+             so the browser itself refuses the click, skips the button when
+             tabbing and tells screen readers it is unavailable - none of that
+             has to be re-implemented in JavaScript. setControlsEnabled() in
+             baklava.js takes it off again the moment a scene is opened. -->
+        <button class="ctl-btn" id="btnSar" aria-pressed="false" disabled
+                title="{{ settings.btn_sar_title }}"
+                aria-label="{{ settings.btn_sar_title }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <polygon points="12 3 22 8 12 13 2 8 12 3"></polygon>
+                <polyline points="2 13 12 18 22 13"></polyline>
+                <polyline points="2 17.5 12 22.5 22 17.5"></polyline>
+            </svg>
+        </button>
+
+        <!-- The switch. It is a <button> with role="switch": that is the
+             accessible way to say "this is on or off", and aria-checked is
+             what screen readers read out. JavaScript keeps it in step.
+
+             OFF -> every vessel of the scene is on the map, dark and safe.
+             ON  -> only the dark ones are left.
+
+             Disabled to start with, for the same reason as the SAR button. -->
+        <div class="switch-wrap is-disabled">
+            <span class="switch-label" id="switchLabel">{{ settings.toggle_dark_label }}</span>
+            <button class="switch" id="switchDark" role="switch" disabled
+                    aria-checked="false" aria-labelledby="switchLabel">
+                <span class="switch__knob" aria-hidden="true"></span>
+            </button>
         </div>
-
-    </aside>
+    </div>
 </main>
 
 
+<!-- ==========================================================================
+     BLOCK 3 - SIDEBAR (slides in from the RIGHT when the hamburger is clicked)
+     Three sections. The one we are currently in carries "is-current".
+     ========================================================================== -->
 <div class="sidebar-backdrop is-hidden" id="sidebarBackdrop"></div>
 
 <nav class="sidebar" id="sidebar">
@@ -89,6 +211,9 @@
 
     <button class="sidebar__btn is-current" id="btnSarScenes">SAR Scenes</button>
 
+    <!-- This one is a real address, so it is a link (<a>) and not a button.
+         That way it behaves like any other link: middle-click or ctrl-click
+         opens it in a new tab. The address comes from app.py. -->
     <a class="sidebar__btn" id="linkAisArchive"
        href="{{ settings.link_ais_archive }}">AIS Database Archive</a>
 
@@ -96,6 +221,10 @@
 </nav>
 
 
+<!-- ==========================================================================
+     BLOCK 4 - POPUP ("Under construction!")
+     Used by the sidebar sections that do not exist yet.
+     ========================================================================== -->
 <div class="popup-overlay is-hidden" id="popupOverlay">
     <div class="popup">
         <p class="popup__message" id="popupMessage">Under construction!</p>
@@ -103,19 +232,41 @@
     </div>
 </div>
 
-<div class="processing-overlay is-hidden" id="processingOverlay" role="status" aria-live="polite">
-    <div class="processing-card">
-        <img class="processing-anim" aria-hidden="true" alt=""
-             src="{{ url_for('static', filename='anim/loader.svg') }}">
-        <p class="processing-message" id="processingMessage">Processing...</p>
+
+<!-- ==========================================================================
+     BLOCK 5 - THE LOADING ANIMATION
+
+     A dimmed sheet over the whole page with the animated mark in the middle.
+     It appears while the server is being waited for and goes away by itself
+     when the answer arrives - see showLoader()/hideLoader() in baklava.js.
+
+     The animation is a single .svg that animates itself, so there is nothing
+     to start or stop here; hiding the box is enough. Which file it is comes
+     from "loading_animation_path" in app.py, so a .gif can be dropped in
+     instead without touching this line.
+     ========================================================================== -->
+<div class="loader-overlay is-hidden" id="loaderOverlay"
+     role="status" aria-live="polite" aria-busy="true">
+    <div class="loader">
+        <img class="loader__anim"
+             src="{{ url_for('static', filename=settings.loading_animation_path) }}"
+             alt=""
+             onerror="this.style.display='none'">
+        <p class="loader__text" id="loaderText">{{ settings.loading_text }}</p>
     </div>
 </div>
 
 
+<!--
+    Pass the settings from app.py into JavaScript.
+    | tojson turns the Python dictionary into a JavaScript object, so that
+    baklava.js can read e.g. BAKLAVA_SETTINGS.map_default_lat
+-->
 <script>
     const BAKLAVA_SETTINGS = {{ settings | tojson }};
 </script>
 
+<!-- Our own logic. Loaded last so that all boxes above already exist. -->
 <script src="{{ url_for('static', filename='js/baklava.js') }}"></script>
 
 </body>

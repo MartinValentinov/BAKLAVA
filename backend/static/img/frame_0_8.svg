@@ -1,27 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
-<!-- The drawing was made on an A4 page (210x297mm) but only occupies a small
-     patch in the middle of it. Shown at any size, most of the picture was
-     therefore empty margin and the mark itself came out tiny.
-
-     The viewBox below crops the page down to the drawing: "64 105 79 130"
-     means "show the rectangle starting at x=64, y=105, 79 wide and 130 tall".
-     Not one line of the artwork was moved - only the window onto it changed,
-     so the file still opens in Inkscape exactly as before.
-
-     How big it appears in the page is set by the logo-size variable at the
-     top of css/style.css. -->
-
-
 <svg
-   width="79"
-   height="130"
-   viewBox="64 105 79 130"
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
    version="1.1"
    id="svg5"
    inkscape:version="1.1.1 (3bf5ae0d25, 2021-09-20)"
-   sodipodi:docname="logo.svg"
+   sodipodi:docname="frame_0_8.svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
