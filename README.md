@@ -91,7 +91,7 @@ changes size except when the top bar comes and goes.
 | The scenes | `app.py` | `SCENE_BLUEPRINTS`, `build_scene_list()` |
 | The vessels and the radar picture | `app.py` | `build_scene_detail()`, `_make_vessels()` |
 | Colours, fonts, sizes | `static/css/style.css` | the `:root` block at the top |
-| The controls, the top bar, the ship card | `static/css/ui.css` | sections A–D |
+| The controls, the top bar, the ship card | `static/css/ui.css` | sections A–G |
 | Map style (satellite, dark, grey) | `static/js/baklava.js` | `initMap()` |
 | What the controls do | `static/js/baklava.js` | PART 8 |
 
@@ -146,14 +146,14 @@ flash for a single frame and read as a glitch. Set it to `0` to switch that off.
 Open the page, press F12 → Console:
 
 ```js
-BAKLAVA.startPicking()                 // as if the pencil was clicked
-BAKLAVA.selectScene("TYR_20240311")    // open a scene straight away
-BAKLAVA.setDarkToggle(false)           // show every vessel of the scene
-BAKLAVA.setSar(true)                   // the SAR overlay
-BAKLAVA.closeScene()                   // back to picking
-BAKLAVA.notify("Anything", "error")    // "success", "error", "info", "pending"
-BAKLAVA.focusOn(43.2, 28.6, 8)
-BAKLAVA.scene                          // the scene currently open
+BAKLAVA.startScenePicking()               // as if the pencil was clicked
+BAKLAVA.selectScene("TYR_20240311")       // open a scene straight away
+BAKLAVA.setShowOnlyDarkVessels(false)     // show every vessel of the scene
+BAKLAVA.setSarOverlay(true)               // the SAR overlay
+BAKLAVA.closeScene()                      // back to picking
+BAKLAVA.notify("Anything", "error")       // "success", "error", "info", "pending"
+BAKLAVA.focusMapOn(43.2, 28.6, 8)
+BAKLAVA.scene                             // the scene currently open
 ```
 
 ## Backend contract
