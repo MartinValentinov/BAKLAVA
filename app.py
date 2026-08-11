@@ -1,7 +1,9 @@
-import math
-import random
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, Response, jsonify, render_template, request
 
 APP_SETTINGS = {
     "project_title": "BAKLAVA",
@@ -22,6 +24,18 @@ APP_SETTINGS = {
 
     "ship_details_title": "Ship details:",
 
+    "btn_timings_title": "Show how long each stage took",
+    "timings_title": "Processing time",
+    "timings_none": "No timing recorded for this scene",
+    "timings_client_label": "browser fetch",
+
+    "picker_title": "Scenes",
+    "picker_processed_label": "On the map",
+    "picker_available_label": "Ready to process",
+    "picker_empty": "Nothing on the Jetson yet",
+    "picker_no_processed": "No scene has been processed yet",
+    "picker_no_available": "Every image on the Jetson has been processed",
+
     "link_ais_archive": "https://supm.online/ais/",
 
     "msg_scenes_failed":  "Could not load the scenes. Try again.",
@@ -30,144 +44,51 @@ APP_SETTINGS = {
     "msg_pick_scene_off": "Scene selection cancelled",
     "msg_no_sar":         "This scene has no SAR overlay yet",
     "msg_sar_needs_scene": "Select a scene first",
+    "msg_images_failed":  "Could not reach the Jetson. Try again.",
+    "msg_processing":     "Processing on the Jetson - this can take a while",
+    "msg_process_failed": "Processing failed",
+    "msg_process_done":   "Processed",
 
     "map_default_lat": 42.0,
     "map_default_lon": 20.0,
     "map_default_zoom": 5,
 }
 
-
-SCENE_BLUEPRINTS = [
-    {
-        "id": "TYR_20240311",
-        "label": "Tyrrhenian Sea - 11 Mar",
-        "lat": 41.05, "lon": 12.35,
-        "width_deg": 2.0, "height_deg": 1.7,
-        "rotation_deg": 28,
-        "total": 70, "dark": 50,
-    },
-    {
-        "id": "AEG_20240309",
-        "label": "Aegean Sea - 9 Mar",
-        "lat": 37.60, "lon": 25.30,
-        "width_deg": 2.4, "height_deg": 1.9,
-        "rotation_deg": -14,
-        "total": 46, "dark": 18,
-    },
-    {
-        "id": "BLS_20240307",
-        "label": "Western Black Sea - 7 Mar",
-        "lat": 43.35, "lon": 30.40,
-        "width_deg": 2.6, "height_deg": 2.0,
-        "rotation_deg": 9,
-        "total": 58, "dark": 31,
-    },
-    {
-        "id": "ADR_20240305",
-        "label": "Southern Adriatic - 5 Mar",
-        "lat": 41.90, "lon": 18.20,
-        "width_deg": 2.1, "height_deg": 1.8,
-        "rotation_deg": -35,
-        "total": 33, "dark": 7,
-    },
-]
-
-DEMO_SHIP_NAMES = [
-    "MV Adriatic Star", "MV Kalypso", "MT Pontos", "MV Danubia",
-    "MT Levant Trader", "MV Zephyros", "MV Ionian Pearl", "MT Bosphorus",
-    "MV Sirena", "MT Aegean Dawn", "MV Thalassa", "MV Nordic Ember",
-]
-
-DEMO_SHIP_TYPES = ["Cargo", "Tanker", "Fishing", "Container", "Bulk carrier", "Tug"]
+BACKEND_URL = os.environ.get("BAKLAVA_BACKEND_URL", "http://localhost:5080")
+BACKEND_TIMEOUT = 150
+PROCESS_TIMEOUT = 1800
 
 
-def _rotate(dx, dy, degrees):
-    angle = math.radians(degrees)
-    return (dx * math.cos(angle) - dy * math.sin(angle),
-            dx * math.sin(angle) + dy * math.cos(angle))
+def _backend_open(path, range_header=None, method="GET", timeout=None):
+    req = urllib.request.Request(
+        BACKEND_URL + path, data=b"" if method == "POST" else None, method=method)
+    if range_header:
+        req.add_header("Range", range_header)
+    return urllib.request.urlopen(req, timeout=timeout or BACKEND_TIMEOUT)
 
 
-def _scene_corners(blueprint):
-    half_w = blueprint["width_deg"] / 2
-    half_h = blueprint["height_deg"] / 2
-
-    upright = [(-half_w, -half_h), (half_w, -half_h),
-               (half_w, half_h), (-half_w, half_h)]
-
-    corners = []
-    for dx, dy in upright:
-        rx, ry = _rotate(dx, dy, blueprint["rotation_deg"])
-        corners.append([
-            round(blueprint["lat"] + ry, 6),
-            round(blueprint["lon"] + rx / math.cos(math.radians(blueprint["lat"])), 6),
-        ])
-    return corners
+def _proxy_json(path, method="GET", timeout=None):
+    try:
+        with _backend_open(path, method=method, timeout=timeout) as resp:
+            return Response(resp.read(), status=resp.status, mimetype="application/json")
+    except urllib.error.HTTPError as exc:
+        return Response(exc.read(), status=exc.code, mimetype="application/json")
+    except urllib.error.URLError as exc:
+        return jsonify({"error": f"backend unreachable: {exc.reason}"}), 502
 
 
-def _make_vessels(blueprint):
-    rng = random.Random(blueprint["id"])
-
-    half_w = blueprint["width_deg"] / 2
-    half_h = blueprint["height_deg"] / 2
-    lat_scale = math.cos(math.radians(blueprint["lat"]))
-
-    vessels = []
-    for index in range(blueprint["total"]):
-        is_dark = index < blueprint["dark"]
-
-        dx = rng.uniform(-half_w, half_w) * 0.88
-        dy = rng.uniform(-half_h, half_h) * 0.88
-        rx, ry = _rotate(dx, dy, blueprint["rotation_deg"])
-
-        vessels.append({
-            "id": f"{blueprint['id']}-{index + 1:03d}",
-            "lat": round(blueprint["lat"] + ry, 6),
-            "lon": round(blueprint["lon"] + rx / lat_scale, 6),
-            "dark": is_dark,
-            "name": (f"Dark contact {index + 1:02d}" if is_dark
-                     else rng.choice(DEMO_SHIP_NAMES)),
-            "mmsi": "" if is_dark else str(rng.randint(200000000, 279999999)),
-            "type": "Unknown" if is_dark else rng.choice(DEMO_SHIP_TYPES),
-            "length_m": rng.randint(38, 295),
-            "heading_deg": rng.randint(0, 359),
-            "speed_kn": round(rng.uniform(0.0, 18.5), 1),
-            "detected_at": "2024-03-11 04:17 UTC",
-            "confidence": round(rng.uniform(0.62, 0.99), 2),
-        })
-
-    return vessels
-
-
-def build_scene_list():
-    scenes = []
-    for blueprint in SCENE_BLUEPRINTS:
-        scenes.append({
-            "id": blueprint["id"],
-            "label": blueprint["label"],
-            "corners": _scene_corners(blueprint),
-            "has_sar": False,
-        })
-    return scenes
-
-
-def build_scene_detail(scene_id):
-    blueprint = next((b for b in SCENE_BLUEPRINTS if b["id"] == scene_id), None)
-    if blueprint is None:
-        return None
-
-    vessels = _make_vessels(blueprint)
-
-    return {
-        "id": blueprint["id"],
-        "label": blueprint["label"],
-        "corners": _scene_corners(blueprint),
-        "totals": {
-            "total": len(vessels),
-            "dark": sum(1 for vessel in vessels if vessel["dark"]),
-        },
-        "vessels": vessels,
-        "sar_overlay": None,
-    }
+def _proxy_binary(path, mimetype):
+    try:
+        with _backend_open(path, request.headers.get("Range")) as resp:
+            headers = {}
+            for h in ("Content-Range", "Accept-Ranges", "Content-Length"):
+                if h in resp.headers:
+                    headers[h] = resp.headers[h]
+            return Response(resp.read(), status=resp.status, mimetype=mimetype, headers=headers)
+    except urllib.error.HTTPError as exc:
+        return Response(exc.read(), status=exc.code, mimetype="application/json")
+    except urllib.error.URLError as exc:
+        return jsonify({"error": f"backend unreachable: {exc.reason}"}), 502
 
 
 app = Flask(__name__)
@@ -180,15 +101,42 @@ def home():
 
 @app.route("/api/scenes")
 def api_scenes():
-    return jsonify({"scenes": build_scene_list()})
+    return _proxy_json("/api/scenes")
+
+
+@app.route("/api/scenes/available", methods=["POST"])
+def api_scenes_available():
+    return _proxy_json("/api/scenes/available", method="POST")
+
+
+@app.route("/api/scenes/<scene_id>/process", methods=["POST"])
+def api_scene_process(scene_id):
+    return _proxy_json(
+        f"/api/scenes/{urllib.parse.quote(scene_id, safe='')}/process",
+        method="POST", timeout=PROCESS_TIMEOUT)
 
 
 @app.route("/api/scenes/<scene_id>")
 def api_scene(scene_id):
-    scene = build_scene_detail(scene_id)
-    if scene is None:
-        return jsonify({"error": "Unknown scene"}), 404
-    return jsonify(scene)
+    return _proxy_json(f"/api/scenes/{urllib.parse.quote(scene_id, safe='')}")
+
+
+@app.route("/api/scenes/<scene_id>/overview")
+def api_scene_overview(scene_id):
+    return _proxy_binary(f"/api/scenes/{urllib.parse.quote(scene_id, safe='')}/overview", "image/jpeg")
+
+
+@app.route("/api/scenes/<scene_id>/crops")
+def api_scene_crops(scene_id):
+    qs = "?full=true" if request.args.get("full") else ""
+    return _proxy_json(f"/api/scenes/{urllib.parse.quote(scene_id, safe='')}/crops{qs}")
+
+
+@app.route("/api/scenes/<scene_id>/crops/<path:relative>")
+def api_scene_crop(scene_id, relative):
+    enc = urllib.parse.quote(scene_id, safe="")
+    enc_rel = urllib.parse.quote(relative, safe="/")
+    return _proxy_binary(f"/api/scenes/{enc}/crops/{enc_rel}", "image/jpeg")
 
 
 if __name__ == "__main__":

@@ -115,14 +115,31 @@ public class SceneCatalogService
 
     public string CropsManifestPath(string name) => Path.Combine(CropsDir(name), "manifest.json");
 
+    public async Task<JsonObject?> EnsureCropsManifestAsync(string name, CancellationToken ct)
+    {
+        var manifest = CropsManifestPath(name);
+        if (File.Exists(manifest))
+            return await ReadManifestAsync(manifest, ct);
+
+        var result = await _client.RunAsync(new[] { "crops-manifest", name }, ct: ct);
+        if (!File.Exists(manifest))
+        {
+            _logger.LogInformation("scene {Scene} has no crops: {Err}", name, result.StdErr.Trim());
+            return null;
+        }
+
+        return await ReadManifestAsync(manifest, ct);
+    }
+
     public async Task<JsonObject?> EnsureCropsAsync(string name, bool full, CancellationToken ct)
     {
         var args = full
-            ? new[] { "crops", name, "--full" }
-            : new[] { "crops", name };
+            ? new[] { "crops", name, "--full", "--tar" }
+            : new[] { "crops", name, "--tar" };
 
         var manifest = CropsManifestPath(name);
-        if (!full && File.Exists(manifest))
+        if (!full && Directory.Exists(CropsDir(name)) && File.Exists(manifest)
+            && Directory.EnumerateFiles(CropsDir(name), "*.jpg", SearchOption.AllDirectories).Any())
             return await ReadManifestAsync(manifest, ct);
 
         var result = await _client.RunProcessAsync(args, ct);

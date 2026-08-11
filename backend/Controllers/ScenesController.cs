@@ -88,10 +88,15 @@ public class ScenesController : ControllerBase
         SarOverlay? overlay = null;
         var overviewPath = await _catalog.EnsureOverviewAsync(name, ct);
         if (overviewPath is not null)
-            overlay = new SarOverlay($"/api/scenes/{Uri.EscapeDataString(name)}/overview", corners);
+        {
+            var overviewCorners = SceneProjector.OverviewBounds(cached.Raw) ?? corners;
+            overlay = new SarOverlay($"/api/scenes/{Uri.EscapeDataString(name)}/overview",
+                                     overviewCorners,
+                                     SceneProjector.Swath(cached.Raw));
+        }
 
         CropSummary? crops = null;
-        var manifest = await _catalog.EnsureCropsAsync(name, full: false, ct);
+        var manifest = await _catalog.EnsureCropsManifestAsync(name, ct);
         if (manifest is not null)
         {
             crops = new CropSummary(
@@ -110,7 +115,8 @@ public class ScenesController : ControllerBase
             Totals: new SceneTotals(vessels.Count, vessels.Count(v => v.Dark)),
             Vessels: vessels,
             SarOverlay: overlay,
-            Crops: crops));
+            Crops: crops,
+            Timings: SceneProjector.Timings(cached.Raw)));
     }
 
     [HttpGet("{name}/raw")]

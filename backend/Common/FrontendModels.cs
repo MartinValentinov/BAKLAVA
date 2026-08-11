@@ -23,7 +23,8 @@ public record VesselDto(
     [property: JsonPropertyName("heading_deg")] double? HeadingDeg,
     [property: JsonPropertyName("speed_kn")] double? SpeedKn,
     [property: JsonPropertyName("detected_at")] string? DetectedAt,
-    [property: JsonPropertyName("confidence")] double? Confidence);
+    [property: JsonPropertyName("confidence")] double? Confidence,
+    [property: JsonPropertyName("corners")] double[][]? Corners);
 
 public record SceneTotals(
     [property: JsonPropertyName("total")] int Total,
@@ -31,7 +32,12 @@ public record SceneTotals(
 
 public record SarOverlay(
     [property: JsonPropertyName("url")] string Url,
-    [property: JsonPropertyName("corners")] double[][] Corners);
+    [property: JsonPropertyName("corners")] double[][] Corners,
+    [property: JsonPropertyName("swath")] double[][]? Swath);
+
+public record TimingStage(
+    [property: JsonPropertyName("stage")] string Stage,
+    [property: JsonPropertyName("ms")] double Ms);
 
 public record SceneDetail(
     [property: JsonPropertyName("id")] string Id,
@@ -40,7 +46,8 @@ public record SceneDetail(
     [property: JsonPropertyName("totals")] SceneTotals Totals,
     [property: JsonPropertyName("vessels")] IReadOnlyList<VesselDto> Vessels,
     [property: JsonPropertyName("sar_overlay")] SarOverlay? SarOverlay,
-    [property: JsonPropertyName("crops")] CropSummary? Crops);
+    [property: JsonPropertyName("crops")] CropSummary? Crops,
+    [property: JsonPropertyName("timings")] IReadOnlyList<TimingStage>? Timings);
 
 public record CropSummary(
     [property: JsonPropertyName("count")] int Count,

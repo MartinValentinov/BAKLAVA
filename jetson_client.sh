@@ -7,6 +7,7 @@
 #   ./jetson_client.sh list-images
 #   ./jetson_client.sh process IMAGE_NAME          (BAKLAVA_BACKEND=cpp|legacy)
 #   ./jetson_client.sh overview SCENE_NAME
+#   ./jetson_client.sh crops-manifest SCENE_NAME
 #   ./jetson_client.sh crops SCENE_NAME [--thumbs|--full|--all]
 #                                       [--only-detections] [--tar]
 set -euo pipefail
@@ -106,6 +107,19 @@ case "$cmd" in
     else
         rm -f "$out"
         echo "no overview for '$name'" >&2
+        exit 1
+    fi
+    ;;
+
+  crops-manifest)
+    name="${1:?usage: jetson_client.sh crops-manifest SCENE_NAME}"
+    dir="$DEST_DIR/$name-crops"
+    mkdir -p "$dir"
+    if curl_auth -f "$JETSON_URL/scenes/$(url_encode "$name")/crops" -o "$dir/manifest.json"; then
+        echo "manifest -> $dir/manifest.json"
+    else
+        rm -f "$dir/manifest.json"
+        echo "no crops for '$name'" >&2
         exit 1
     fi
     ;;

@@ -13,6 +13,15 @@ const shipCard              = document.getElementById("shipCard");
 const shipCardRows          = document.getElementById("shipCardRows");
 const btnCloseShipCard      = document.getElementById("btnCloseShipCard");
 
+const scenePicker           = document.getElementById("scenePicker");
+const pickerBody            = document.getElementById("pickerBody");
+const btnClosePicker        = document.getElementById("btnClosePicker");
+
+const timingsPanel          = document.getElementById("timingsPanel");
+const timingsBody           = document.getElementById("timingsBody");
+const btnCloseTimings       = document.getElementById("btnCloseTimings");
+const btnTimings            = document.getElementById("btnTimings");
+
 const btnPickScene          = document.getElementById("btnPickScene");
 const btnSarOverlay         = document.getElementById("btnSarOverlay");
 const switchDarkOnly        = document.getElementById("switchDarkOnly");
@@ -35,6 +44,7 @@ const loaderText            = document.getElementById("loaderText");
 let map               = null;
 let scenePickerLayer  = null;
 let sceneOutlineLayer = null;
+let vesselBoxLayer    = null;
 let vesselDotLayer    = null;
 let sarOverlayLayer   = null;
 
@@ -42,8 +52,13 @@ let cachedSceneList     = null;
 let isPickingScene      = false;
 let selectedScene       = null;
 let showOnlyDarkVessels = false;
+let sarOverlayOn        = false;
+let lastClientMs        = null;
 let openVesselId        = null;
 let vesselDotsById      = new Map();
+let vesselBoxesById     = new Map();
+
+const DOT_HIDE_FROM_ZOOM = 12;
 
 let noticeHideTimer = null;
 let loaderShownAt   = 0;
@@ -147,17 +162,19 @@ function initMap() {
     sarOverlayLayer   = L.layerGroup().addTo(map);
     scenePickerLayer  = L.featureGroup().addTo(map);
     sceneOutlineLayer = L.layerGroup().addTo(map);
+    vesselBoxLayer    = L.layerGroup().addTo(map);
     vesselDotLayer    = L.layerGroup().addTo(map);
 
     map.on("click", hideShipCard);
+    map.on("zoomend", updateVesselDotVisibility);
 }
 
 function focusMapOn(lat, lon, zoom = 8) {
     map.setView([lat, lon], zoom);
 }
 
-async function loadSceneList() {
-    if (cachedSceneList) {
+async function loadSceneList({ refresh = false } = {}) {
+    if (cachedSceneList && !refresh) {
         return cachedSceneList;
     }
 
@@ -173,6 +190,121 @@ async function loadSceneList() {
     }
 }
 
+async function loadAvailableImages() {
+    try {
+        const response = await fetch("/api/scenes/available", { method: "POST" });
+        if (!response.ok) {
+            throw new Error(`Server answered ${response.status}`);
+        }
+        const names = await response.json();
+        return Array.isArray(names) ? names : [];
+    } catch (error) {
+        notify(BAKLAVA_SETTINGS.msg_images_failed, "error");
+        console.error(error);
+        return [];
+    }
+}
+
+const SEA_REGIONS = [
+    { name: "Sea of Azov",     lat: [45.2, 47.4], lon: [34.8, 39.6] },
+    { name: "Sea of Marmara",  lat: [40.2, 41.3], lon: [26.5, 30.0] },
+    { name: "Black Sea",       lat: [40.9, 47.4], lon: [27.3, 42.0] },
+    { name: "Aegean Sea",      lat: [35.0, 41.0], lon: [22.5, 28.5] },
+    { name: "Ionian Sea",      lat: [35.8, 40.5], lon: [15.5, 22.5] },
+    { name: "Adriatic Sea",    lat: [39.5, 45.9], lon: [12.2, 20.0] },
+    { name: "Tyrrhenian Sea",  lat: [38.0, 44.0], lon: [9.0,  16.0] },
+    { name: "Ligurian Sea",    lat: [42.8, 44.6], lon: [7.0,  10.0] },
+    { name: "Balearic Sea",    lat: [37.8, 43.8], lon: [0.0,   9.0] },
+    { name: "Alboran Sea",     lat: [34.8, 37.6], lon: [-6.0,  0.0] },
+    { name: "Levantine Sea",   lat: [30.5, 37.2], lon: [28.0, 36.6] },
+    { name: "Libyan Sea",      lat: [30.0, 35.6], lon: [15.0, 25.0] },
+    { name: "Strait of Sicily", lat: [33.0, 38.0], lon: [10.0, 15.0] },
+];
+
+function regionName(lat, lon) {
+    const hit = SEA_REGIONS.find(r =>
+        lat >= r.lat[0] && lat <= r.lat[1] && lon >= r.lon[0] && lon <= r.lon[1]);
+    return hit ? hit.name : null;
+}
+
+function shortCoords(lat, lon) {
+    const ns = lat >= 0 ? "N" : "S";
+    const ew = lon >= 0 ? "E" : "W";
+    return `${Math.abs(lat).toFixed(2)}°${ns} ${Math.abs(lon).toFixed(2)}°${ew}`;
+}
+
+function sceneCentre(corners) {
+    if (!corners || !corners.length) {
+        return null;
+    }
+    const lat = corners.reduce((sum, c) => sum + c[0], 0) / corners.length;
+    const lon = corners.reduce((sum, c) => sum + c[1], 0) / corners.length;
+    return [lat, lon];
+}
+
+function scenePlace(scene) {
+    const centre = sceneCentre(scene.corners);
+    if (!centre) {
+        return null;
+    }
+    return {
+        region: regionName(centre[0], centre[1]),
+        coords: shortCoords(centre[0], centre[1]),
+    };
+}
+
+function sceneDisplayName(scene) {
+    const place = scenePlace(scene);
+    const when  = sceneWhen(scene.id) || scene.label;
+    if (!place) {
+        return when;
+    }
+    return `${place.region || place.coords} — ${when}`;
+}
+
+const S1_NAME = /^(S1[A-D])_([A-Z]{2})_([A-Z]{4})_[A-Z0-9]{4}_(\d{8})T(\d{6})_/;
+
+function sentinelParts(rawName) {
+    const m = S1_NAME.exec(rawName);
+    if (!m) {
+        return null;
+    }
+    const [, mission, mode, product, day, time] = m;
+    const when = new Date(Date.UTC(
+        Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)),
+        Number(time.slice(0, 2)), Number(time.slice(2, 4)), Number(time.slice(4, 6))));
+    return { mission, mode, product, when };
+}
+
+function formatWhen(date) {
+    return date.toLocaleString("en-GB", {
+        day: "numeric", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+        timeZone: "UTC",
+    }) + " UTC";
+}
+
+function sceneWhen(rawName) {
+    const parts = sentinelParts(rawName);
+    return parts ? formatWhen(parts.when) : null;
+}
+
+function imageDisplayName(imageName) {
+    const parts = sentinelParts(imageName);
+    if (!parts) {
+        return imageName;
+    }
+    return `Sentinel-1${parts.mission.slice(2)} — ${formatWhen(parts.when)}`;
+}
+
+function isSafeProduct(imageName) {
+    return imageName.toLowerCase().endsWith(".safe");
+}
+
+function sceneIdForImage(imageName) {
+    return imageName.replace(/\.[^.]+$/, "") + "__cpp";
+}
+
 function drawScenePickerBoxes(scenes) {
     scenePickerLayer.clearLayers();
 
@@ -184,33 +316,170 @@ function drawScenePickerBoxes(scenes) {
             fillOpacity: 0.18,
         });
 
-        box.bindTooltip(scene.label, { sticky: true });
+        box.bindTooltip(sceneDisplayName(scene), { sticky: true });
         box.on("click", () => selectScene(scene.id));
         box.addTo(scenePickerLayer);
     });
 }
 
-async function startScenePicking() {
+function addPickerGroup(label) {
+    const heading = document.createElement("p");
+    heading.className   = "picker__group-label";
+    heading.textContent = label;
+    pickerBody.appendChild(heading);
+}
+
+function addPickerNote(text) {
+    const note = document.createElement("p");
+    note.className   = "picker__empty";
+    note.textContent = text;
+    pickerBody.appendChild(note);
+}
+
+function addPickerItem({ name, note, tag, tagKind, onPick }) {
+    const item = document.createElement("button");
+    item.className = "picker__item";
+    item.type      = "button";
+
+    const text = document.createElement("span");
+    text.className = "picker__item-text";
+
+    const title = document.createElement("span");
+    title.className   = "picker__item-name";
+    title.textContent = name;
+    text.appendChild(title);
+
+    if (note) {
+        const sub = document.createElement("span");
+        sub.className   = "picker__item-note";
+        sub.textContent = note;
+        text.appendChild(document.createElement("br"));
+        text.appendChild(sub);
+    }
+
+    item.appendChild(text);
+
+    if (tag) {
+        const badge = document.createElement("span");
+        badge.className   = "picker__tag" + (tagKind ? ` picker__tag--${tagKind}` : "");
+        badge.textContent = tag;
+        item.appendChild(badge);
+    }
+
+    item.addEventListener("click", onPick);
+    pickerBody.appendChild(item);
+    return item;
+}
+
+function renderPicker(scenes, images) {
+    pickerBody.innerHTML = "";
+
+    if (!scenes.length && !images.length) {
+        addPickerNote(BAKLAVA_SETTINGS.picker_empty);
+        return;
+    }
+
+    addPickerGroup(BAKLAVA_SETTINGS.picker_available_label);
+    if (!images.length) {
+        addPickerNote(BAKLAVA_SETTINGS.picker_no_available);
+    } else {
+        images.forEach(image => {
+            const parts = sentinelParts(image);
+            addPickerItem({
+                name: imageDisplayName(image),
+                note: parts ? `${parts.mode} ${parts.product}` : image,
+                tag: isSafeProduct(image) ? "SAFE" : "TIF",
+                tagKind: isSafeProduct(image) ? "safe" : null,
+                onPick: () => processImage(image),
+            });
+        });
+    }
+
+    addPickerGroup(BAKLAVA_SETTINGS.picker_processed_label);
+    if (!scenes.length) {
+        addPickerNote(BAKLAVA_SETTINGS.picker_no_processed);
+    } else {
+        scenes.forEach(scene => {
+            const place = scenePlace(scene);
+            addPickerItem({
+                name: sceneDisplayName(scene),
+                note: place && place.region ? place.coords : null,
+                onPick: () => selectScene(scene.id),
+            });
+        });
+    }
+}
+
+function openPicker() {
+    scenePicker.classList.remove("is-hidden");
+}
+
+function closePicker() {
+    scenePicker.classList.add("is-hidden");
+}
+
+async function startScenePicking({ refresh = false } = {}) {
     if (selectedScene) {
         closeScene({ withoutReopeningPicker: true });
     }
 
-    const scenes = await runWithLoader(loadSceneList);
-    if (!scenes.length) {
-        return;
-    }
+    const [scenes, images] = await runWithLoader(() => Promise.all([
+        loadSceneList({ refresh }),
+        loadAvailableImages(),
+    ]));
 
     isPickingScene = true;
     btnPickScene.classList.add("is-active");
     btnPickScene.setAttribute("aria-pressed", "true");
     mapBoard.classList.add("is-picking-scene");
 
+    renderPicker(scenes, images);
+    openPicker();
+
     drawScenePickerBoxes(scenes);
 
     map.invalidateSize();
-    map.fitBounds(scenePickerLayer.getBounds(), { padding: [40, 40] });
+    if (scenes.length) {
+        map.fitBounds(scenePickerLayer.getBounds(), { padding: [40, 40] });
+        notify(BAKLAVA_SETTINGS.msg_pick_scene, "info");
+    }
+}
 
-    notify(BAKLAVA_SETTINGS.msg_pick_scene, "info");
+async function processImage(imageName) {
+    closePicker();
+
+    let failure = null;
+    const startedAt = performance.now();
+    await runWithLoader(async () => {
+        try {
+            const response = await fetch(
+                `/api/scenes/${encodeURIComponent(imageName)}/process`,
+                { method: "POST" });
+
+            if (!response.ok) {
+                const problem = await response.json().catch(() => null);
+                failure = (problem && problem.error) || `Server answered ${response.status}`;
+            }
+        } catch (error) {
+            failure = error.message;
+            console.error(error);
+        }
+    }, BAKLAVA_SETTINGS.msg_processing);
+
+    lastClientMs = performance.now() - startedAt;
+
+    const sceneId = sceneIdForImage(imageName);
+    const scenes  = await loadSceneList({ refresh: true });
+    const landed  = scenes.some(scene => scene.id === sceneId);
+
+    if (landed) {
+        notify(`${BAKLAVA_SETTINGS.msg_process_done} ${imageDisplayName(imageName)}`, "success");
+        await selectScene(sceneId);
+        return;
+    }
+
+    showPopup(`${BAKLAVA_SETTINGS.msg_process_failed}\n\n${failure || imageDisplayName(imageName)}`);
+    startScenePicking();
 }
 
 function stopScenePicking(options = {}) {
@@ -219,6 +488,7 @@ function stopScenePicking(options = {}) {
     btnPickScene.setAttribute("aria-pressed", "false");
     mapBoard.classList.remove("is-picking-scene");
 
+    closePicker();
     scenePickerLayer.clearLayers();
 
     if (!options.withoutNotice) {
@@ -264,11 +534,15 @@ async function selectScene(sceneId) {
 
     statTotalShips.textContent  = scene.totals.total;
     statDarkVessels.textContent = scene.totals.dark;
-    statSceneName.textContent   = scene.label;
+    statSceneName.textContent   = sceneDisplayName(scene);
     statsBar.classList.remove("is-hidden");
 
     setSceneControlsEnabled(true);
     setShowOnlyDarkVessels(true);
+
+    if (!timingsPanel.classList.contains("is-hidden")) {
+        renderTimings();
+    }
 }
 
 function closeScene(options = {}) {
@@ -278,10 +552,13 @@ function closeScene(options = {}) {
 
     sceneOutlineLayer.clearLayers();
     vesselDotLayer.clearLayers();
+    vesselBoxLayer.clearLayers();
     vesselDotsById.clear();
+    vesselBoxesById.clear();
     setSarOverlay(false, { withoutNotice: true });
 
     statsBar.classList.add("is-hidden");
+    setTimingsVisible(false);
     setShowOnlyDarkVessels(false);
     setSceneControlsEnabled(false);
 
@@ -290,7 +567,74 @@ function closeScene(options = {}) {
     }
 }
 
+function formatMs(ms) {
+    return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
+}
+
+function renderTimings() {
+    timingsBody.innerHTML = "";
+
+    const stages = (selectedScene && selectedScene.timings) || [];
+    if (!stages.length && lastClientMs === null) {
+        const note = document.createElement("p");
+        note.className   = "timings__empty";
+        note.textContent = BAKLAVA_SETTINGS.timings_none;
+        timingsBody.appendChild(note);
+        return;
+    }
+
+    const rows = stages.map(stage => ({
+        name: stage.stage,
+        ms: stage.ms,
+        total: /^total$/i.test(stage.stage),
+    }));
+
+    if (lastClientMs !== null) {
+        rows.push({
+            name: BAKLAVA_SETTINGS.timings_client_label,
+            ms: lastClientMs,
+            client: true,
+        });
+    }
+
+    const widest = Math.max(...rows.map(row => row.ms), 1);
+
+    rows.forEach(row => {
+        const item = document.createElement("div");
+        item.className = "timings__row"
+            + (row.total ? " is-total" : "")
+            + (row.client ? " is-client" : "");
+
+        const name = document.createElement("span");
+        name.className   = "timings__name";
+        name.textContent = row.name;
+
+        const value = document.createElement("span");
+        value.className   = "timings__ms";
+        value.textContent = formatMs(row.ms);
+
+        const bar = document.createElement("div");
+        bar.className = "timings__bar";
+        bar.style.width = `${Math.max(1, (row.ms / widest) * 100)}%`;
+
+        item.appendChild(name);
+        item.appendChild(value);
+        item.appendChild(bar);
+        timingsBody.appendChild(item);
+    });
+}
+
+function setTimingsVisible(visible) {
+    timingsPanel.classList.toggle("is-hidden", !visible);
+    btnTimings.classList.toggle("is-active", visible);
+    btnTimings.setAttribute("aria-pressed", visible ? "true" : "false");
+    if (visible) {
+        renderTimings();
+    }
+}
+
 function setSceneControlsEnabled(enabled) {
+    btnTimings.disabled     = !enabled;
     btnSarOverlay.disabled  = !enabled;
     switchDarkOnly.disabled = !enabled;
     switchDarkOnlyGroup.classList.toggle("is-disabled", !enabled);
@@ -313,9 +657,40 @@ function vesselDotStyle(vessel, isOpenInCard) {
     };
 }
 
+function vesselBoxStyle(vessel, isOpenInCard) {
+    return {
+        color: vessel.dark ? paletteColor("--color-vessel-dark")
+                           : paletteColor("--color-vessel-safe"),
+        weight: isOpenInCard ? 3 : 2,
+        opacity: 1,
+        fill: true,
+        fillOpacity: isOpenInCard ? 0.25 : 0,
+    };
+}
+
+function sceneHasVesselBoxes() {
+    return Boolean(selectedScene)
+        && selectedScene.vessels.some(vessel => vessel.corners);
+}
+
+function updateVesselDotVisibility() {
+    if (!map || !vesselDotLayer) {
+        return;
+    }
+    const hide = sceneHasVesselBoxes()
+        && (sarOverlayOn || map.getZoom() >= DOT_HIDE_FROM_ZOOM);
+    if (hide && map.hasLayer(vesselDotLayer)) {
+        map.removeLayer(vesselDotLayer);
+    } else if (!hide && !map.hasLayer(vesselDotLayer)) {
+        vesselDotLayer.addTo(map);
+    }
+}
+
 function drawVessels() {
     vesselDotLayer.clearLayers();
+    vesselBoxLayer.clearLayers();
     vesselDotsById.clear();
+    vesselBoxesById.clear();
 
     if (!selectedScene) {
         return;
@@ -326,9 +701,25 @@ function drawVessels() {
         : selectedScene.vessels;
 
     vesselsToDraw.forEach(vessel => {
+        const isOpen = vessel.id === openVesselId;
+
+        if (vessel.corners) {
+            const box = L.polygon(
+                vessel.corners,
+                Object.assign(vesselBoxStyle(vessel, isOpen), {
+                    bubblingMouseEvents: false,
+                })
+            );
+
+            box.on("click", () => showShipCard(vessel));
+
+            box.addTo(vesselBoxLayer);
+            vesselBoxesById.set(vessel.id, box);
+        }
+
         const dot = L.circleMarker(
             [vessel.lat, vessel.lon],
-            Object.assign(vesselDotStyle(vessel, vessel.id === openVesselId), {
+            Object.assign(vesselDotStyle(vessel, isOpen), {
                 bubblingMouseEvents: false,
             })
         );
@@ -338,6 +729,8 @@ function drawVessels() {
         dot.addTo(vesselDotLayer);
         vesselDotsById.set(vessel.id, dot);
     });
+
+    updateVesselDotVisibility();
 
     if (openVesselId !== null && !vesselDotsById.has(openVesselId)) {
         hideShipCard();
@@ -405,15 +798,25 @@ function highlightVesselDot(vesselId, on) {
         return;
     }
 
-    const dot    = vesselDotsById.get(vesselId);
     const vessel = selectedScene.vessels.find(item => item.id === vesselId);
-    if (!dot || !vessel) {
+    if (!vessel) {
         return;
     }
 
-    const style = vesselDotStyle(vessel, on);
-    dot.setStyle(style);
-    dot.setRadius(style.radius);
+    const dot = vesselDotsById.get(vesselId);
+    if (dot) {
+        const style = vesselDotStyle(vessel, on);
+        dot.setStyle(style);
+        dot.setRadius(style.radius);
+    }
+
+    const box = vesselBoxesById.get(vesselId);
+    if (box) {
+        box.setStyle(vesselBoxStyle(vessel, on));
+        if (on) {
+            box.bringToFront();
+        }
+    }
 }
 
 function formatCoordinate(value, positiveLetter, negativeLetter) {
@@ -424,18 +827,130 @@ function formatCoordinate(value, positiveLetter, negativeLetter) {
     return `${Math.abs(value).toFixed(6)}° ${letter}`;
 }
 
+function squareToQuad(p) {
+    const [x0, y0] = [p[0].x, p[0].y];
+    const [x1, y1] = [p[1].x, p[1].y];
+    const [x2, y2] = [p[2].x, p[2].y];
+    const [x3, y3] = [p[3].x, p[3].y];
+
+    const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+    const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+
+    let a, b, c, d, e, f, g, h;
+
+    if (Math.abs(dx3) < 1e-9 && Math.abs(dy3) < 1e-9) {
+        a = x1 - x0; b = x2 - x1; c = x0;
+        d = y1 - y0; e = y2 - y1; f = y0;
+        g = 0; h = 0;
+    } else {
+        const den = dx1 * dy2 - dx2 * dy1;
+        g = (dx3 * dy2 - dx2 * dy3) / den;
+        h = (dx1 * dy3 - dx3 * dy1) / den;
+        a = x1 - x0 + g * x1;
+        b = x3 - x0 + h * x3;
+        c = x0;
+        d = y1 - y0 + g * y1;
+        e = y3 - y0 + h * y3;
+        f = y0;
+    }
+
+    return { a, b, c, d, e, f, g, h };
+}
+
+function mercatorY(lat) {
+    return Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+}
+
+function swathClipPath(bounds, swath) {
+    if (!swath || swath.length < 3) {
+        return "";
+    }
+
+    const latTop = bounds[0][0], latBottom = bounds[2][0];
+    const lonLeft = bounds[0][1], lonRight = bounds[1][1];
+    const yTop = mercatorY(latTop), yBottom = mercatorY(latBottom);
+
+    const points = swath.map(corner => {
+        const x = (corner[1] - lonLeft) / (lonRight - lonLeft) * 100;
+        const y = (mercatorY(corner[0]) - yTop) / (yBottom - yTop) * 100;
+        return `${x.toFixed(3)}% ${y.toFixed(3)}%`;
+    });
+
+    return `polygon(${points.join(", ")})`;
+}
+
+const SarQuadOverlay = L.Layer.extend({
+    initialize(url, quad, opacity, swath) {
+        this._url = url;
+        this._quad = quad;
+        this._opacity = opacity;
+        this._swath = swath;
+    },
+
+    onAdd(map) {
+        this._map = map;
+
+        const img = L.DomUtil.create("img", "sar-quad");
+        img.style.position       = "absolute";
+        img.style.left           = "0";
+        img.style.top            = "0";
+        img.style.transformOrigin = "0 0";
+        img.style.pointerEvents  = "none";
+        img.style.opacity        = String(this._opacity);
+        img.style.clipPath       = swathClipPath(this._quad, this._swath);
+        img.alt                  = "";
+        img.onload = () => this._warp();
+        img.src = this._url;
+
+        this._img = img;
+        map.getPanes().overlayPane.appendChild(img);
+        map.on("viewreset zoom move zoomend moveend", this._warp, this);
+        this._warp();
+    },
+
+    onRemove(map) {
+        L.DomUtil.remove(this._img);
+        map.off("viewreset zoom move zoomend moveend", this._warp, this);
+        this._img = null;
+    },
+
+    _warp() {
+        const img = this._img;
+        if (!img || !img.naturalWidth || !this._map) {
+            return;
+        }
+
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        const points = this._quad.map(
+            corner => this._map.latLngToLayerPoint(L.latLng(corner[0], corner[1])));
+
+        const m = squareToQuad(points);
+
+        img.style.transform = "matrix3d(" + [
+            m.a / w, m.d / w, 0, m.g / w,
+            m.b / h, m.e / h, 0, m.h / h,
+            0,       0,       1, 0,
+            m.c,     m.f,     0, 1,
+        ].join(",") + ")";
+    },
+});
+
 function setSarOverlay(on, options = {}) {
     sarOverlayLayer.clearLayers();
+    sarOverlayOn = false;
     btnSarOverlay.classList.toggle("is-active", on);
     btnSarOverlay.setAttribute("aria-pressed", on ? "true" : "false");
 
     if (!on) {
+        updateVesselDotVisibility();
         return;
     }
 
     if (!selectedScene) {
         btnSarOverlay.classList.remove("is-active");
         btnSarOverlay.setAttribute("aria-pressed", "false");
+        updateVesselDotVisibility();
         if (!options.withoutNotice) {
             notify(BAKLAVA_SETTINGS.msg_sar_needs_scene, "info");
         }
@@ -445,12 +960,15 @@ function setSarOverlay(on, options = {}) {
     const radarPicture = selectedScene.sar_overlay;
 
     if (radarPicture && radarPicture.url) {
-        L.imageOverlay(radarPicture.url,
-                       L.latLngBounds(radarPicture.corners || selectedScene.corners),
-                       { opacity: 0.85 })
-         .addTo(sarOverlayLayer);
+        const quad = radarPicture.corners || selectedScene.corners;
+        new SarQuadOverlay(radarPicture.url, quad, 1, radarPicture.swath)
+            .addTo(sarOverlayLayer);
+        sarOverlayOn = true;
+        updateVesselDotVisibility();
         return;
     }
+
+    updateVesselDotVisibility();
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
         bounds: L.latLngBounds(selectedScene.corners),
@@ -487,6 +1005,14 @@ btnCloseScene.addEventListener("click", () => closeScene());
 
 btnCloseShipCard.addEventListener("click", hideShipCard);
 
+btnClosePicker.addEventListener("click", () => stopScenePicking());
+
+btnTimings.addEventListener("click", () => {
+    setTimingsVisible(timingsPanel.classList.contains("is-hidden"));
+});
+
+btnCloseTimings.addEventListener("click", () => setTimingsVisible(false));
+
 btnOpenMenu.addEventListener("click", openSidebar);
 btnCloseMenu.addEventListener("click", closeSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
@@ -512,6 +1038,9 @@ document.addEventListener("keydown", (event) => {
     closeSidebar();
     hideShipCard();
     hideNotice();
+    if (isPickingScene) {
+        stopScenePicking();
+    }
 });
 
 notice.addEventListener("click", hideNotice);
@@ -521,6 +1050,8 @@ initMap();
 window.BAKLAVA = {
     startScenePicking,
     stopScenePicking,
+    loadAvailableImages,
+    processImage,
     selectScene,
     closeScene,
     setShowOnlyDarkVessels,

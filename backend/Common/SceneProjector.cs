@@ -4,6 +4,47 @@ namespace BaklavaBackend.Common;
 
 public static class SceneProjector
 {
+    public static List<TimingStage>? Timings(JsonObject? rawCpp)
+    {
+        if (rawCpp?["timings"] is not JsonArray stages || stages.Count == 0)
+            return null;
+
+        var list = new List<TimingStage>();
+        foreach (var node in stages)
+        {
+            if (node is not JsonObject stage) continue;
+            var name = stage["stage"]?.GetValue<string>();
+            var ms = stage["ms"]?.GetValue<double>();
+            if (name is null || ms is null) continue;
+            list.Add(new TimingStage(name, ms.Value));
+        }
+
+        return list.Count > 0 ? list : null;
+    }
+
+    public static double[][]? Swath(JsonObject? rawCpp) => LonLatQuad(rawCpp, "swath_lonlat");
+
+    public static double[][]? OverviewBounds(JsonObject? rawCpp) =>
+        LonLatQuad(rawCpp, "overview_bounds_lonlat");
+
+    private static double[][]? LonLatQuad(JsonObject? rawCpp, string key)
+    {
+        if (rawCpp?[key] is not JsonArray bounds || bounds.Count < 4)
+            return null;
+
+        var corners = new List<double[]>();
+        foreach (var node in bounds)
+        {
+            if (node is not JsonArray pair || pair.Count < 2) continue;
+            var lon = pair[0]?.GetValue<double>();
+            var lat = pair[1]?.GetValue<double>();
+            if (lon is null || lat is null) continue;
+            corners.Add(new[] { lat.Value, lon.Value });
+        }
+
+        return corners.Count >= 4 ? corners.Take(4).ToArray() : null;
+    }
+
     public static double[][]? Footprint(JsonObject normalized, JsonObject? rawCpp)
     {
         var fp = (rawCpp?["footprint_lonlat"] ?? normalized["footprint_lonlat"]) as JsonArray;
@@ -97,6 +138,14 @@ public static class SceneProjector
             var length = ship["length_m"]?.GetValue<double?>();
             var width = ship["width_m"]?.GetValue<double?>();
 
+            double[][]? outline = null;
+            if (ship["corners"] is JsonArray corners && corners.Count > 0)
+            {
+                outline = corners
+                    .Select(c => new[] { c![0]!.GetValue<double>(), c![1]!.GetValue<double>() })
+                    .ToArray();
+            }
+
             vessels.Add(new VesselDto(
                 Id: $"{sceneId}-{rawId:D3}",
                 Lat: lat.Value,
@@ -109,7 +158,8 @@ public static class SceneProjector
                 HeadingDeg: ship["heading"]?.GetValue<double?>(),
                 SpeedKn: null,
                 DetectedAt: detectedAt,
-                Confidence: ship["conf"]?.GetValue<double?>()));
+                Confidence: ship["conf"]?.GetValue<double?>(),
+                Corners: outline));
 
             _ = width;
         }

@@ -64,6 +64,25 @@
             <span class="notice__text" id="noticeText"></span>
         </div>
 
+        <aside class="picker is-hidden" id="scenePicker">
+            <div class="picker__head">
+                <h2 class="picker__title">{{ settings.picker_title }}</h2>
+                <button class="picker__close" id="btnClosePicker"
+                        aria-label="Close the scene picker">&times;</button>
+            </div>
+
+            <div class="picker__body" id="pickerBody"></div>
+        </aside>
+
+        <aside class="timings is-hidden" id="timingsPanel">
+            <div class="timings__head">
+                <h2 class="timings__title">{{ settings.timings_title }}</h2>
+                <button class="timings__close" id="btnCloseTimings"
+                        aria-label="Close the timing panel">&times;</button>
+            </div>
+            <div class="timings__body" id="timingsBody"></div>
+        </aside>
+
         <aside class="ship-card is-hidden" id="shipCard">
             <div class="ship-card__head">
                 <h2 class="ship-card__title">{{ settings.ship_details_title }}</h2>
@@ -92,6 +111,17 @@
                 <polygon points="12 3 22 8 12 13 2 8 12 3"></polygon>
                 <polyline points="2 13 12 18 22 13"></polyline>
                 <polyline points="2 17.5 12 22.5 22 17.5"></polyline>
+            </svg>
+        </button>
+
+        <button class="control-button" id="btnTimings" aria-pressed="false" disabled
+                title="{{ settings.btn_timings_title }}"
+                aria-label="{{ settings.btn_timings_title }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="13" r="8"></circle>
+                <line x1="12" y1="13" x2="12" y2="9"></line>
+                <line x1="12" y1="13" x2="15" y2="15"></line>
+                <line x1="9" y1="2" x2="15" y2="2"></line>
             </svg>
         </button>
 
@@ -136,8 +166,12 @@
     </div>
 </div>
 
+<script id="baklava-settings" type="application/json">{{ settings | tojson }}</script>
+
 <script>
-    const BAKLAVA_SETTINGS = {{ settings | tojson }};
+    const BAKLAVA_SETTINGS = JSON.parse(
+        document.getElementById('baklava-settings').textContent
+    );
 </script>
 
 <script src="{{ url_for('static', filename='js/baklava.js') }}"></script>

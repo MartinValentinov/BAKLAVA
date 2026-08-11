@@ -40,6 +40,18 @@ public static partial class SceneNormalizer
                 rowPx = sy / corners.Count;
             }
 
+            JsonArray? outline = null;
+            if (d["corners_lonlat"] is JsonArray lonlat && lonlat.Count > 0)
+            {
+                outline = new JsonArray();
+                foreach (var c in lonlat)
+                {
+                    outline.Add(new JsonArray(
+                        c![1]!.GetValue<double>(),
+                        c![0]!.GetValue<double>()));
+                }
+            }
+
             ships.Add(new JsonObject
             {
                 ["id"] = i + 1,
@@ -51,6 +63,7 @@ public static partial class SceneNormalizer
                 ["heading"] = d["heading_deg"]?.GetValue<double>(),
                 ["col_px"] = colPx,
                 ["row_px"] = rowPx,
+                ["corners"] = outline,
             });
         }
 
