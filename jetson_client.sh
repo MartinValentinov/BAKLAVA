@@ -20,6 +20,22 @@ DEST_DIR="${BAKLAVA_DEST_DIR:-/Users/martinvalentinov/Desktop/scenes}"
 
 mkdir -p "$DEST_DIR"
 
+# On Windows, a bare "python3" (or "python") often resolves to the Microsoft
+# Store's placeholder stub rather than a real interpreter, even when a real
+# one is installed under a different name on PATH. Probe candidates and pick
+# the first one that actually runs, instead of assuming "python3" works.
+PYTHON=""
+for candidate in python3 python py; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" --version >/dev/null 2>&1; then
+        PYTHON="$candidate"
+        break
+    fi
+done
+if [[ -z "$PYTHON" ]]; then
+    echo "no working python interpreter found (tried python3, python, py)" >&2
+    exit 1
+fi
+
 curl_auth() {
     local args=(-sS)
     if [[ -n "$JETSON_TOKEN" ]]; then
@@ -29,7 +45,7 @@ curl_auth() {
 }
 
 url_encode() {
-    python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
+    "$PYTHON" -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
 }
 
 cmd="${1:-}"
@@ -92,9 +108,9 @@ case "$cmd" in
     code="${response##*$'\n'}"
     payload="${response%$'\n'*}"
     if [[ "$code" == "200" ]]; then
-        python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('message',''))" "$payload"
+        "$PYTHON" -c "import json,sys; print(json.loads(sys.argv[1]).get('message',''))" "$payload"
     else
-        python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('error','request failed'), file=sys.stderr)" "$payload"
+        "$PYTHON" -c "import json,sys; print(json.loads(sys.argv[1]).get('error','request failed'), file=sys.stderr)" "$payload"
         exit 1
     fi
     ;;
@@ -164,7 +180,7 @@ case "$cmd" in
         exit 1
     fi
 
-    plan="$(python3 - "$dir" "$tier" "$only" <<'PY'
+    plan="$("$PYTHON" - "$dir" "$tier" "$only" <<'PY'
 import json, os, sys, zlib
 root, tier, only = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(os.path.join(root, "manifest.json")) as fh:
@@ -202,7 +218,7 @@ PY
         mkdir -p "$(dirname "$dest")"
         part="$dest.$crc.part"
         if curl_auth -f -C - "$JETSON_URL/scenes/$enc_name/crops/$rel" -o "$part"; then
-            if python3 -c 'import sys,zlib; sys.exit(0 if zlib.crc32(open(sys.argv[1],"rb").read()) & 0xFFFFFFFF == int(sys.argv[2]) else 1)' "$part" "$crc"; then
+            if "$PYTHON" -c 'import sys,zlib; sys.exit(0 if zlib.crc32(open(sys.argv[1],"rb").read()) & 0xFFFFFFFF == int(sys.argv[2]) else 1)' "$part" "$crc"; then
                 mv "$part" "$dest"
                 got=$((got + 1))
             else

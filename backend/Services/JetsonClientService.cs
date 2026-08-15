@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using BaklavaBackend.Common;
+using System.Linq;
 
 namespace BaklavaBackend.Services;
 
@@ -14,6 +15,7 @@ public class JetsonClientService
     private readonly string? _token;
     private readonly string? _backend;
     private readonly ILogger<JetsonClientService> _logger;
+    private readonly string _windowsBash = "bash";
 
     public string DestDir { get; }
 
@@ -29,6 +31,34 @@ public class JetsonClientService
 
         if (!File.Exists(_scriptPath))
             _logger.LogWarning("jetson_client.sh not found at {Path}", _scriptPath);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            // A bare "bash" resolves to the WSL launcher in System32 (Windows checks
+            // System32 before PATH for unqualified executable names, so putting Git Bash
+            // ahead on PATH does not change this). WSL only sees Windows drives under
+            // /mnt/c/..., so it can never find a script given a D:\... path. Git Bash
+            // understands Windows paths natively, so resolve it explicitly instead.
+            var configured = config["JetsonClient:BashPath"];
+            var candidates = new[]
+            {
+                configured,
+                Environment.GetEnvironmentVariable("ProgramFiles") is { } pf ? Path.Combine(pf, "Git", "bin", "bash.exe") : null,
+                Environment.GetEnvironmentVariable("ProgramFiles(x86)") is { } pfx86 ? Path.Combine(pfx86, "Git", "bin", "bash.exe") : null,
+            };
+            var found = candidates.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
+            if (found is not null)
+            {
+                _windowsBash = found;
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Git Bash not found at the usual install path; falling back to \"bash\" on PATH, "
+                    + "which resolves to WSL on most machines and cannot read D:\\... paths. "
+                    + "Set JetsonClient:BashPath to bash.exe's full path if this fails.");
+            }
+        }
 
         if (string.IsNullOrWhiteSpace(_token) &&
             string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BAKLAVA_TOKEN")))
@@ -55,7 +85,7 @@ public class JetsonClientService
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            psi.FileName = "bash";
+            psi.FileName = _windowsBash;
             psi.ArgumentList.Add(_scriptPath);
         }
         else
