@@ -45,6 +45,7 @@ let map               = null;
 let scenePickerLayer  = null;
 let sceneOutlineLayer = null;
 let vesselBoxLayer    = null;
+let vesselVectorLayer = null;
 let vesselDotLayer    = null;
 let sarOverlayLayer   = null;
 
@@ -57,6 +58,7 @@ let lastClientMs        = null;
 let openVesselId        = null;
 let vesselDotsById      = new Map();
 let vesselBoxesById     = new Map();
+let vesselVectorsById   = new Map();
 
 const DOT_HIDE_FROM_ZOOM = 12;
 
@@ -163,10 +165,12 @@ function initMap() {
     scenePickerLayer  = L.featureGroup().addTo(map);
     sceneOutlineLayer = L.layerGroup().addTo(map);
     vesselBoxLayer    = L.layerGroup().addTo(map);
+    vesselVectorLayer = L.layerGroup().addTo(map);
     vesselDotLayer    = L.layerGroup().addTo(map);
 
     map.on("click", hideShipCard);
     map.on("zoomend", updateVesselDotVisibility);
+    map.on("zoomend moveend", repositionVesselVectors);
 }
 
 function focusMapOn(lat, lon, zoom = 8) {
@@ -553,8 +557,10 @@ function closeScene(options = {}) {
     sceneOutlineLayer.clearLayers();
     vesselDotLayer.clearLayers();
     vesselBoxLayer.clearLayers();
+    vesselVectorLayer.clearLayers();
     vesselDotsById.clear();
     vesselBoxesById.clear();
+    vesselVectorsById.clear();
     setSarOverlay(false, { withoutNotice: true });
 
     statsBar.classList.add("is-hidden");
@@ -668,6 +674,63 @@ function vesselBoxStyle(vessel, isOpenInCard) {
     };
 }
 
+function vesselVectorStyle(vessel, isOpenInCard) {
+    return {
+        color: paletteColor("--color-vessel-dark"),
+        weight: isOpenInCard ? 4 : 2,
+        opacity: 1,
+        lineCap: "round",
+    };
+}
+
+// heading_deg is a compass bearing (0deg = N, clockwise) but only carries the
+// ship's axis of orientation, not a resolved bow/stern direction (the onboard
+// OBB detector reports it mod 180deg). Drawn as a double-ended I-beam rather
+// than an arrow so the indicator never asserts a direction we don't actually
+// know.
+function vesselVectorSegments(vessel, isOpenInCard) {
+    if (vessel.heading_deg == null || !map) {
+        return null;
+    }
+
+    const center = map.latLngToContainerPoint([vessel.lat, vessel.lon]);
+    const halfLen = isOpenInCard ? 20 : 14;
+    const capLen  = isOpenInCard ? 6  : 4;
+
+    const theta = vessel.heading_deg * Math.PI / 180;
+    const ux = Math.sin(theta), uy = -Math.cos(theta);
+    const px = -uy, py = ux;
+
+    const toLatLng = (x, y) => map.containerPointToLatLng(L.point(x, y));
+
+    const end1 = { x: center.x + ux * halfLen, y: center.y + uy * halfLen };
+    const end2 = { x: center.x - ux * halfLen, y: center.y - uy * halfLen };
+
+    return [
+        [toLatLng(end1.x + px * capLen, end1.y + py * capLen),
+         toLatLng(end1.x - px * capLen, end1.y - py * capLen)],
+        [toLatLng(end1.x, end1.y), toLatLng(end2.x, end2.y)],
+        [toLatLng(end2.x + px * capLen, end2.y + py * capLen),
+         toLatLng(end2.x - px * capLen, end2.y - py * capLen)],
+    ];
+}
+
+function repositionVesselVectors() {
+    if (!map || !selectedScene) {
+        return;
+    }
+    vesselVectorsById.forEach((vector, vesselId) => {
+        const vessel = selectedScene.vessels.find(v => v.id === vesselId);
+        if (!vessel) {
+            return;
+        }
+        const segments = vesselVectorSegments(vessel, vesselId === openVesselId);
+        if (segments) {
+            vector.setLatLngs(segments);
+        }
+    });
+}
+
 function sceneHasVesselBoxes() {
     return Boolean(selectedScene)
         && selectedScene.vessels.some(vessel => vessel.corners);
@@ -689,8 +752,10 @@ function updateVesselDotVisibility() {
 function drawVessels() {
     vesselDotLayer.clearLayers();
     vesselBoxLayer.clearLayers();
+    vesselVectorLayer.clearLayers();
     vesselDotsById.clear();
     vesselBoxesById.clear();
+    vesselVectorsById.clear();
 
     if (!selectedScene) {
         return;
@@ -715,6 +780,15 @@ function drawVessels() {
 
             box.addTo(vesselBoxLayer);
             vesselBoxesById.set(vessel.id, box);
+        }
+
+        if (vessel.dark && vessel.heading_deg != null) {
+            const vector = L.polyline(
+                vesselVectorSegments(vessel, isOpen),
+                Object.assign(vesselVectorStyle(vessel, isOpen), { interactive: false })
+            );
+            vector.addTo(vesselVectorLayer);
+            vesselVectorsById.set(vessel.id, vector);
         }
 
         const dot = L.circleMarker(
@@ -749,7 +823,7 @@ function showShipCard(vessel) {
         ["MMSI",       vessel.mmsi || "—"],
         ["Type",       vessel.type],
         ["Length",     vessel.length_m ? `${vessel.length_m} m` : ""],
-        ["Heading",    vessel.heading_deg != null ? `${vessel.heading_deg}°` : ""],
+        ["Heading (axis)",    vessel.heading_deg != null ? `${vessel.heading_deg}°` : ""],
         ["Speed",      vessel.speed_kn != null ? `${vessel.speed_kn} kn` : ""],
         ["Detected",   vessel.detected_at],
         ["Confidence", vessel.confidence != null
@@ -815,6 +889,15 @@ function highlightVesselDot(vesselId, on) {
         box.setStyle(vesselBoxStyle(vessel, on));
         if (on) {
             box.bringToFront();
+        }
+    }
+
+    const vector = vesselVectorsById.get(vesselId);
+    if (vector) {
+        vector.setLatLngs(vesselVectorSegments(vessel, on));
+        vector.setStyle(vesselVectorStyle(vessel, on));
+        if (on) {
+            vector.bringToFront();
         }
     }
 }
