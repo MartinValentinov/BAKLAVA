@@ -106,23 +106,27 @@ marks the image processed on success, so it drops out of future
 
 ## Dark-vessel matching
 
-`GET /api/scenes/{name}` calls out to a separate, still-independently-running
-service, `DarkVessel.Api` — its source now lives in this repo at
-[`dark-vessel-detection/`](dark-vessel-detection) (see its own
-[README](dark-vessel-detection/README.md) for setup/secrets) but it's still a
-second process on its own port (`5252` by default), not something this
-backend hosts itself. It cross-references each detected ship against the AIS
-archive, and `GET /api/scenes/{name}` returns **only ships it reports as
-`"Dark"`** — not every ship the model detected. `"UnknownNoCoverage"` (AIS
-wasn't being listened for at that time) and `"Matched"` (a real vessel
-explains the detection) are both filtered out.
+`GET /api/scenes/{name}` matches every detected ship against the AIS archive
+**in-process**: this project references `DarkVessel.Core` and
+`DarkVessel.Infrastructure` from [`dark-vessel-detection/`](dark-vessel-detection)
+directly, and `DarkVesselMatchService` runs `Matcher` against `MongoAisSource`.
+There is no second service to keep alive for scenes to work. (`DarkVessel.Api`
+still exists in that folder for the live AIS collector and its console — see its
+own [README](dark-vessel-detection/README.md) — but scene matching no longer
+goes through it.)
 
-Config (`DarkVessel:BaseUrl` / `DarkVessel:ApiKey`) must point at a running
-`DarkVessel.Api` instance and match its own `Api:ApiKey` secret. `BaseUrl`
-defaults to nothing — it's required, same as `JetsonClient:ScriptPath`.
-`DarkVessel:MaxConcurrentMatches` (default 8) caps how many ships from one
-scene are matched concurrently, since each match fans out to further calls
-inside `DarkVessel.Api`.
+`GET /api/scenes/{name}` returns **only ships reported as `"Dark"`** — not
+every ship the model detected. `"UnknownNoCoverage"` (AIS wasn't being listened
+for at that time) and `"Matched"` (a real vessel explains the detection) are
+both filtered out.
+
+The archive connection comes from `Mongo:ConnectionString` (user-secrets, or the
+`MONGODB_URI` environment variable); the rest of the `Mongo` section has working
+defaults in `appsettings.json`. Leave the connection string blank and matching
+switches off — the backend logs a warning at startup and reports every detection
+as dark, rather than failing. `DarkVessel:MaxConcurrentMatches` (default 8) caps
+how many ships from one scene are matched concurrently, since each match is its
+own set of archive queries.
 
 The wire shape of `GET /api/scenes/{name}` is unchanged (still `{ ships, meta }`)
 — only which ships appear in `ships`, and `meta.ships`'s count, are affected.

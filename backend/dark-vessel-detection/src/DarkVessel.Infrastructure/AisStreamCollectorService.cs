@@ -10,13 +10,13 @@ namespace DarkVessel.Infrastructure;
 
 public sealed class AisStreamCollectorService : BackgroundService
 {
-    private readonly HttpAisSource _store;
+    private readonly IAisArchive _store;
     private readonly AisStreamOptions _options;
     private readonly CollectorState _state;
     private readonly ILogger<AisStreamCollectorService> _logger;
 
     public AisStreamCollectorService(
-        HttpAisSource store, IOptions<AisStreamOptions> options, CollectorState state, ILogger<AisStreamCollectorService> logger)
+        IAisArchive store, IOptions<AisStreamOptions> options, CollectorState state, ILogger<AisStreamCollectorService> logger)
     {
         _store = store;
         _options = options.Value;

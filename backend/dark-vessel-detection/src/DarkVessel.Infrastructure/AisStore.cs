@@ -4,7 +4,7 @@ using MySqlConnector;
 
 namespace DarkVessel.Infrastructure;
 
-public sealed class AisStore : IAisSource
+public sealed class AisStore : IAisArchive
 {
     private readonly string _connectionString;
 

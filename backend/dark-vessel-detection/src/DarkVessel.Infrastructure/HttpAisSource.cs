@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace DarkVessel.Infrastructure;
 
-public sealed class HttpAisSource : IAisSource
+public sealed class HttpAisSource : IAisArchive
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

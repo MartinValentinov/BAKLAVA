@@ -5,10 +5,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <UserSecretsId>a2b5b1b4-0c6a-4a3f-9d2e-3f1c7b8e5a10</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="dark-vessel-detection/src/DarkVessel.Core/DarkVessel.Core.csproj" />
+    <ProjectReference Include="dark-vessel-detection/src/DarkVessel.Infrastructure/DarkVessel.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

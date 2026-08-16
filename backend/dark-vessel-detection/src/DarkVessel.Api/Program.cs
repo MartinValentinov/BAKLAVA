@@ -12,18 +12,52 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.Services.Configure<AisStreamOptions>(builder.Configuration.GetSection(AisStreamOptions.SectionName));
 builder.Services.Configure<BaklavaApiOptions>(builder.Configuration.GetSection(BaklavaApiOptions.SectionName));
-
-builder.Services.AddHttpClient<HttpAisSource>((sp, client) =>
+builder.Services.Configure<MongoAisOptions>(builder.Configuration.GetSection(MongoAisOptions.SectionName));
+builder.Services.PostConfigure<MongoAisOptions>(options =>
 {
-    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<BaklavaApiOptions>>().Value;
-    if (string.IsNullOrWhiteSpace(options.ApiKey))
+    if (string.IsNullOrWhiteSpace(options.ConnectionString))
     {
-        throw new InvalidOperationException(
-            "Baklava:ApiKey is not configured. Set it with " +
-            "`dotnet user-secrets set \"Baklava:ApiKey\" \"...\"` -- never in appsettings.json, which is committed to git.");
+        options.ConnectionString = Environment.GetEnvironmentVariable("MONGODB_URI") ?? "";
     }
-    client.BaseAddress = new Uri(options.BaseUrl);
 });
+
+var archiveBackend = (builder.Configuration["Ais:Source"] ?? "mongo").ToLowerInvariant();
+switch (archiveBackend)
+{
+    case "mongo":
+        builder.Services.AddSingleton<IAisArchive, MongoAisSource>();
+        break;
+
+    case "http":
+        builder.Services.AddHttpClient<HttpAisSource>((sp, client) =>
+        {
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<BaklavaApiOptions>>().Value;
+            if (string.IsNullOrWhiteSpace(options.ApiKey))
+            {
+                throw new InvalidOperationException(
+                    "Baklava:ApiKey is not configured. Set it with " +
+                    "`dotnet user-secrets set \"Baklava:ApiKey\" \"...\"` -- never in appsettings.json, which is committed to git.");
+            }
+            client.BaseAddress = new Uri(options.BaseUrl);
+        });
+        builder.Services.AddSingleton<IAisArchive>(sp => sp.GetRequiredService<HttpAisSource>());
+        break;
+
+    case "mysql":
+        var connectionString = builder.Configuration.GetConnectionString("AisArchive");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
+                "Ais:Source is \"mysql\" but ConnectionStrings:AisArchive is not configured. Set it with " +
+                "`dotnet user-secrets set \"ConnectionStrings:AisArchive\" \"...\"`.");
+        }
+        builder.Services.AddSingleton<IAisArchive>(_ => new AisStore(connectionString));
+        break;
+
+    default:
+        throw new InvalidOperationException(
+            $"Ais:Source \"{archiveBackend}\" is not a known archive backend; use \"mongo\", \"http\" or \"mysql\".");
+}
 
 builder.Services.AddSingleton<CollectorState>();
 builder.Services.AddHostedService<AisStreamCollectorService>();
@@ -101,13 +135,13 @@ app.MapPost("/api/control/stop", (CollectorState state) =>
     return Results.Ok(new { ok = true, desired = "stopped" });
 });
 
-app.MapGet("/api/archive-stats", async (HttpAisSource store, CancellationToken ct) =>
+app.MapGet("/api/archive-stats", async (IAisArchive store, CancellationToken ct) =>
 {
     var stats = await store.ArchiveStatsAsync(ct);
     return Results.Ok(stats);
 });
 
-app.MapPost("/api/match", async (MatchRequest request, HttpAisSource store, CancellationToken ct) =>
+app.MapPost("/api/match", async (MatchRequest request, IAisArchive store, CancellationToken ct) =>
 {
     var timestampUtc = DateTime.SpecifyKind(request.TimestampUtc, DateTimeKind.Utc);
     var detection = new Detection(request.DetectionId, request.Lat, request.Lon, timestampUtc, request.HeadingDeg);
