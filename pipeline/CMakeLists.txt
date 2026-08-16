@@ -1,8 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
 
-# Orin AGX is SM 8.7. Must be set before project() enables CUDA -- by the
-# time project() returns, CMake has already cached its own auto-detected
-# default and this guard would be a no-op.
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
   set(CMAKE_CUDA_ARCHITECTURES 87)
 endif()
@@ -21,12 +18,6 @@ set(CMAKE_CUDA_FLAGS_RELEASE "-O3 --use_fast_math")
 
 find_package(CUDAToolkit REQUIRED)
 
-# ---- GDAL ------------------------------------------------------------------
-# WARNING: if you are inside a conda env, pkg-config will find conda's GDAL
-# rather than the system one. Conda GDAL is built against a different GEOS and
-# a different libstdc++ ABI, and landmask.cpp leans on GEOS through Buffer()
-# and Intersection(). Build with `conda deactivate` unless you have a reason
-# not to. Configure output prints the version it picked -- check it.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GDAL gdal)
 if(NOT GDAL_FOUND)
@@ -43,11 +34,6 @@ if(GDAL_LIBRARY_DIRS)
   link_directories(${GDAL_LIBRARY_DIRS})
 endif()
 
-# ---- libtiff -----------------------------------------------------------
-# Not a new runtime dependency -- GDAL's own GTiff driver already links
-# libtiff. scene.cpp talks to it directly for a raw strip/tile read that
-# bypasses GDAL's RasterIO, which measured ~2.5x slower writing into this
-# pipeline's pinned/GPU-mapped scene buffer (see pipeline/README.md).
 pkg_check_modules(TIFF libtiff-4)
 if(NOT TIFF_FOUND)
   find_path(TIFF_INCLUDE_DIRS tiffio.h)
@@ -58,7 +44,11 @@ if(NOT TIFF_INCLUDE_DIRS OR NOT TIFF_LIBRARIES)
 endif()
 message(STATUS "libtiff version: ${TIFF_VERSION}")
 
-# ---- TensorRT --------------------------------------------------------------
+find_package(JPEG REQUIRED)
+message(STATUS "libjpeg      : ${JPEG_LIBRARIES}")
+
+find_package(Threads REQUIRED)
+
 set(TRT_ROOT "/usr" CACHE PATH "TensorRT install prefix")
 find_path(TRT_INCLUDE_DIR NvInfer.h
           HINTS ${TRT_ROOT}/include ${TRT_ROOT}/include/aarch64-linux-gnu)
@@ -69,32 +59,40 @@ if(NOT TRT_INCLUDE_DIR OR NOT TRT_NVINFER OR NOT TRT_ONNXPARSER)
 endif()
 message(STATUS "TensorRT inc : ${TRT_INCLUDE_DIR}")
 
-# ---- target ----------------------------------------------------------------
-# Flat layout: every source and header sits next to this file.
 add_executable(sar_ship_detect
   main.cpp
   config.cpp
-  scene.cpp
-  landmask.cpp
-  engine.cpp
-  render.cpp
-  kernels.cu
+  io/scene.cpp
+  io/landmask.cpp
+  io/safe.cpp
+  l1/rdgeom.cpp
+  l1/l1proc.cpp
+  l1/kernels.cu
+  detect/engine.cpp
+  detect/kernels.cu
+  output/render.cpp
+  output/jpeg.cpp
+  output/crops.cpp
+  output/kernels.cu
 )
 
 target_include_directories(sar_ship_detect PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${GDAL_INCLUDE_DIRS}
   ${TIFF_INCLUDE_DIRS}
+  ${JPEG_INCLUDE_DIRS}
   ${TRT_INCLUDE_DIR}
 )
 
 target_link_libraries(sar_ship_detect PRIVATE
   ${GDAL_LIBRARIES}
   ${TIFF_LIBRARIES}
+  ${JPEG_LIBRARIES}
   ${TRT_NVINFER}
   ${TRT_ONNXPARSER}
   CUDA::cudart
   CUDA::nvjpeg
+  Threads::Threads
 )
 
 set_target_properties(sar_ship_detect PROPERTIES

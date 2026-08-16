@@ -1,16 +1,27 @@
 #include "landmask.hpp"
 #include "scene.hpp"
-#include "util.hpp"
+#include "../common/util.hpp"
 
 #include <gdal_priv.h>
 #include <gdal_alg.h>
+#include <gdal_version.h>
 #include <ogrsf_frmts.h>
+#include <ogr_geometry.h>
 #include <ogr_spatialref.h>
 
 #include <algorithm>
 #include <cmath>
 
+#if defined(GDAL_VERSION_NUM) && GDAL_VERSION_NUM >= 3030000
+#define HAVE_PREPARED_GEOMETRY 1
+#else
+#define HAVE_PREPARED_GEOMETRY 0
+#endif
+
 LandMask::~LandMask() {
+#if HAVE_PREPARED_GEOMETRY
+    for (auto* p : prepared_) if (p) OGRDestroyPreparedGeometry(p);
+#endif
     for (auto* g : geoms_) OGRGeometryFactory::destroyGeometry(g);
 }
 
@@ -24,12 +35,9 @@ bool LandMask::build(const std::vector<std::string>& shp, const Scene& scene,
 
     double minx, miny, maxx, maxy;
     scene.bboxMap(minx, miny, maxx, maxy);
-    // Pad by the buffer so shorelines just outside the scene still push their
-    // buffer into it.
     const double pad = buffer_m + 1000.0;
     minx -= pad; miny -= pad; maxx += pad; maxy += pad;
 
-    // Scene bbox expressed in the shapefile CRS (GSHHG ships in WGS84).
     OGRSpatialReference wgs;
     wgs.importFromEPSG(4326);
     wgs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
@@ -45,7 +53,6 @@ bool LandMask::build(const std::vector<std::string>& shp, const Scene& scene,
     OCTDestroyCoordinateTransformation(
         reinterpret_cast<OGRCoordinateTransformationH>(toWgs));
 
-    // Clip rectangle in scene CRS.
     OGRLinearRing ring;
     ring.addPoint(minx, miny); ring.addPoint(maxx, miny);
     ring.addPoint(maxx, maxy); ring.addPoint(minx, maxy); ring.addPoint(minx, miny);
@@ -63,7 +70,7 @@ bool LandMask::build(const std::vector<std::string>& shp, const Scene& scene,
 
         layer->SetSpatialFilterRect(wminx, wminy, wmaxx, wmaxy);
 
-        OGRSpatialReference* lsrs = layer->GetSpatialRef();
+        auto* lsrs = layer->GetSpatialRef();
         OGRCoordinateTransformation* toScene = nullptr;
         if (lsrs) {
             OGRSpatialReference src(*lsrs);
@@ -80,9 +87,6 @@ bool LandMask::build(const std::vector<std::string>& shp, const Scene& scene,
                 OGRGeometry* c = g->clone();
                 if (toScene) c->transform(toScene);
 
-                // Clip to the padded scene box first: GSHHG L1 in this region is
-                // one enormous Eurasia polygon, and buffering it whole is what
-                // would make this slow.
                 OGRGeometry* clipped = c->Intersection(&clipRect);
                 OGRGeometryFactory::destroyGeometry(c);
 
@@ -114,10 +118,15 @@ bool LandMask::build(const std::vector<std::string>& shp, const Scene& scene,
 
     if (geoms_.empty()) {
         std::fprintf(stderr, "[land] no land polygons intersect this scene\n");
-        ready_ = true;                 // legitimately open ocean
+        ready_ = true;
         cw_ = ch_ = 0;
         return true;
     }
+
+#if HAVE_PREPARED_GEOMETRY
+    prepared_.reserve(geoms_.size());
+    for (auto* g : geoms_) prepared_.push_back(OGRCreatePreparedGeometry(g));
+#endif
 
     rasterizeCoarse(scene);
     erode();
@@ -131,6 +140,12 @@ bool LandMask::isLand(double x, double y) const {
     for (size_t i = 0; i < geoms_.size(); ++i) {
         const Env& e = envs_[i];
         if (x < e.minx || x > e.maxx || y < e.miny || y > e.maxy) continue;
+#if HAVE_PREPARED_GEOMETRY
+        if (i < prepared_.size() && prepared_[i]) {
+            if (OGRPreparedGeometryContains(prepared_[i], &p)) return true;
+            continue;
+        }
+#endif
         if (geoms_[i]->Contains(&p)) return true;
     }
     return false;
@@ -158,8 +173,6 @@ void LandMask::rasterizeCoarse(const Scene& scene) {
 
     std::vector<double> burn(geoms_.size(), 1.0);
     int band = 1;
-    // ALL_TOUCHED deliberately OFF: we want under-coverage, then erosion, so a
-    // skipped tile is guaranteed to be fully inside the exclusion zone.
     char** opts = nullptr;
     opts = CSLSetNameValue(opts, "ALL_TOUCHED", "FALSE");
 
@@ -176,6 +189,7 @@ void LandMask::rasterizeCoarse(const Scene& scene) {
 
 void LandMask::erode() {
     if (coarse_.empty()) return;
+    coarseRaw_ = coarse_;
     std::vector<uint8_t> out(coarse_.size(), 0);
     for (int y = 1; y < ch_ - 1; ++y) {
         for (int x = 1; x < cw_ - 1; ++x) {

@@ -1,5 +1,5 @@
 #include "engine.hpp"
-#include "util.hpp"
+#include "../common/util.hpp"
 
 #include <NvInfer.h>
 #include <NvOnnxParser.h>
@@ -31,7 +31,7 @@ std::vector<char> readFile(const std::string& p) {
     return buf;
 }
 
-}  // namespace
+}
 
 Engine::~Engine() {
     for (auto* c : ctx_) delete c;
@@ -69,7 +69,6 @@ bool Engine::build(const std::string& onnxPath, const std::string& enginePath,
     auto* builder = createInferBuilder(gLogger);
     if (!builder) return false;
 
-    // Static shapes: no kEXPLICIT_BATCH flag needed in TRT 10, no profile.
     auto* network = builder->createNetworkV2(0);
     auto* parser  = nvonnxparser::createParser(*network, gLogger);
 
@@ -81,8 +80,6 @@ bool Engine::build(const std::string& onnxPath, const std::string& enginePath,
         return false;
     }
 
-    // Reject a dynamic model early with a clear message rather than letting
-    // TensorRT fail deep inside the builder.
     for (int i = 0; i < network->getNbInputs(); ++i) {
         Dims d = network->getInput(i)->getDimensions();
         for (int j = 0; j < d.nbDims; ++j) {

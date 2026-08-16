@@ -1,0 +1,21 @@
+services:
+  sar-ship-detect:
+    image: sar-ship-detect:latest
+    build:
+      context: pipeline
+      dockerfile: docker/Dockerfile
+    container_name: sar-ship-detect
+    restart: unless-stopped
+    runtime: nvidia
+    ipc: host
+    user: "0:0"
+    init: true
+    entrypoint: ["/app/serve_supervisor.sh"]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - SERVE_DIR=/data/code/Baklava/yolov8s-obb-cpp/data/.serve
+    volumes:
+      - /data/code/Baklava:/data/code/Baklava
+    labels:
+      - project=baklava-ship-detect

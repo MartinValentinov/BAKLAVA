@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include <string>
 #include <cuda_runtime.h>
 
@@ -17,14 +18,12 @@
 
 #define FATAL(...)                                                             \
     do {                                                                       \
-        std::fprintf(stderr, "[fatal] ");                                      \
-        std::fprintf(stderr, __VA_ARGS__);                                     \
-        std::fprintf(stderr, "\n");                                            \
-        std::exit(1);                                                          \
+        char _m[1024];                                                         \
+        std::snprintf(_m, sizeof _m, __VA_ARGS__);                             \
+        std::fprintf(stderr, "[fatal] %s\n", _m);                              \
+        throw std::runtime_error(_m);                                          \
     } while (0)
 
-// Wall-clock stage timer. Every stage prints, so a missed latency target is
-// immediately attributable rather than a mystery.
 class Timer {
 public:
     explicit Timer(std::string label) : label_(std::move(label)),
