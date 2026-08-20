@@ -18,6 +18,7 @@ GEOID_NAME=${GEOID_NAME:-egm96.tif}
 OVERVIEW_MAX=${OVERVIEW_MAX:-4096}
 BOX_THICKNESS=${BOX_THICKNESS:-0}
 CFAR_THRESH=${CFAR_THRESH:-50}
+CONF_THRESH=${CONF_THRESH:-0.30}
 
 TTY=()
 [[ -t 0 && -t 1 ]] && TTY=(-it)
@@ -199,12 +200,6 @@ case "$cmd" in
     fi
 
     if (( USE_PERSIST )); then
-        # The persistent container mounts the whole /data/code/Baklava tree at
-        # its real host path (see docker-compose.yml), so no /scene_in or
-        # /scene_out indirection is needed -- the host paths are already valid
-        # inside it, .SAFE directories included (a directory can't be hard-
-        # linked the way a flat raster is, which is why that indirection
-        # existed for run_container's per-call bind mount in the first place).
         SCENE_IN_ARG="$scene"
         SCENE_OUT="$outdir"
         MODEL_DIR="$DATA/model"
@@ -227,6 +222,9 @@ case "$cmd" in
     (( want_render ))   && extra+=(--out-jpg "$SCENE_OUT/${stem}.jpg")
     (( want_overview )) && extra+=(--out-overview "$SCENE_OUT/${stem}_overview.jpg" --overview-max "$OVERVIEW_MAX" --box-thickness "$BOX_THICKNESS")
     (( CFAR_THRESH > 0 )) && extra+=(--cfar "$CFAR_THRESH")
+    has_conf=0
+    for a in "${extra[@]}"; do [[ "$a" == "--conf" ]] && has_conf=1; done
+    (( has_conf )) || extra+=(--conf "$CONF_THRESH")
     (( want_crops ))    && extra+=(--out-crops "$SCENE_OUT/${stem}_crops")
     (( want_l2 ))       && extra+=(--out-l2 "$SCENE_OUT/${stem}_L2.tif")
 
