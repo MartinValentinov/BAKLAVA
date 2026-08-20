@@ -156,6 +156,7 @@ public static class SceneProjector
                 Type: "Unknown",
                 LengthM: length,
                 HeadingDeg: ship["heading"]?.GetValue<double?>(),
+                HeadingConfidence: ship["heading_confidence"]?.GetValue<double?>(),
                 SpeedKn: null,
                 DetectedAt: detectedAt,
                 Confidence: ship["conf"]?.GetValue<double?>(),

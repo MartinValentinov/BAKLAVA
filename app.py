@@ -32,6 +32,7 @@ APP_SETTINGS = {
     "picker_no_available": "Every image on the Jetson has been processed",
 
     "link_ais_archive": "https://www.marinetraffic.com",
+    "landing_cta": "Start tracking",
     "link_demo": os.environ.get("BAKLAVA_DEMO_URL", "http://localhost:5001/"),
 
     "msg_scenes_failed":  "Could not load the scenes. Try again.",
@@ -93,7 +94,12 @@ app = Flask(__name__)
 
 
 @app.route("/")
-def home():
+def landing():
+    return render_template("landing.html", settings=APP_SETTINGS)
+
+
+@app.route("/map")
+def map_view():
     return render_template("index.html", settings=APP_SETTINGS)
 
 
@@ -122,6 +128,17 @@ def api_scene(scene_id):
 @app.route("/api/scenes/<scene_id>/overview")
 def api_scene_overview(scene_id):
     return _proxy_binary(f"/api/scenes/{urllib.parse.quote(scene_id, safe='')}/overview", "image/jpeg")
+
+
+@app.route("/api/last-viewed")
+def api_last_viewed():
+    return _proxy_json("/api/scenes/last-viewed")
+
+
+@app.route("/api/last-viewed/<scene_id>", methods=["PUT"])
+def api_set_last_viewed(scene_id):
+    return _proxy_json(
+        f"/api/scenes/last-viewed/{urllib.parse.quote(scene_id, safe='')}", method="PUT")
 
 
 if __name__ == "__main__":

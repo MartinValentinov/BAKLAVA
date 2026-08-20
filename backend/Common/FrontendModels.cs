@@ -21,6 +21,7 @@ public record VesselDto(
     [property: JsonPropertyName("type")] string? Type,
     [property: JsonPropertyName("length_m")] double? LengthM,
     [property: JsonPropertyName("heading_deg")] double? HeadingDeg,
+    [property: JsonPropertyName("heading_confidence")] double? HeadingConfidence,
     [property: JsonPropertyName("speed_kn")] double? SpeedKn,
     [property: JsonPropertyName("detected_at")] string? DetectedAt,
     [property: JsonPropertyName("confidence")] double? Confidence,

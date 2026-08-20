@@ -149,6 +149,30 @@ public class ScenesController : ControllerBase
         return Ok(scenes);
     }
 
+    private static string? _lastViewedId;
+    private static DateTime? _lastViewedAt;
+
+    [HttpGet("last-viewed")]
+    public IActionResult LastViewed()
+    {
+        return Ok(new
+        {
+            id = _lastViewedId,
+            at = _lastViewedAt?.ToString("o"),
+        });
+    }
+
+    [HttpPut("last-viewed/{name}")]
+    public IActionResult SetLastViewed(string name)
+    {
+        if (!Validation.IsSafeName(name))
+            return BadRequest(new { error = "invalid scene name" });
+
+        _lastViewedId = name;
+        _lastViewedAt = DateTime.UtcNow;
+        return Ok(new { id = _lastViewedId, at = _lastViewedAt?.ToString("o") });
+    }
+
     [HttpPost("available")]
     public async Task<IActionResult> Available(CancellationToken ct)
     {

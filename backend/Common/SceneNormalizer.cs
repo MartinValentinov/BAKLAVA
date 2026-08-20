@@ -61,6 +61,7 @@ public static partial class SceneNormalizer
                 ["length_m"] = d["length_m"]?.GetValue<double>(),
                 ["width_m"] = d["width_m"]?.GetValue<double>(),
                 ["heading"] = d["heading_deg"]?.GetValue<double>(),
+                ["heading_confidence"] = d["heading_confidence"]?.GetValue<double>(),
                 ["col_px"] = colPx,
                 ["row_px"] = rowPx,
                 ["corners"] = outline,

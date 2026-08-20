@@ -40,6 +40,7 @@ let scenePickerLayer  = null;
 let sceneOutlineLayer = null;
 let vesselBoxLayer    = null;
 let vesselDotLayer    = null;
+let headingLayer      = null;
 let sarOverlayLayer   = null;
 
 let cachedSceneList     = null;
@@ -159,6 +160,7 @@ function initMap() {
     sceneOutlineLayer = L.layerGroup().addTo(map);
     vesselBoxLayer    = L.layerGroup().addTo(map);
     vesselDotLayer    = L.layerGroup().addTo(map);
+    headingLayer      = L.layerGroup().addTo(map);
 
     map.on("click", hideShipCard);
     map.on("zoomend", updateVesselDotVisibility);
@@ -254,6 +256,11 @@ function scenePlace(scene) {
         region: regionName(centre[0], centre[1]),
         coords: shortCoords(centre[0], centre[1]),
     };
+}
+
+function recordLastViewed(sceneId) {
+    fetch(`/api/last-viewed/${encodeURIComponent(sceneId)}`, { method: "PUT" })
+        .catch(() => {});
 }
 
 function sceneDisplayName(scene) {
@@ -565,6 +572,7 @@ async function selectScene(sceneId) {
             }
             return response.json();
         });
+        recordLastViewed(sceneId);
     } catch (error) {
         notify(BAKLAVA_SETTINGS.msg_scene_failed, "error");
         console.error(error);
@@ -607,7 +615,8 @@ function closeScene(options = {}) {
 
     sceneOutlineLayer.clearLayers();
     vesselDotLayer.clearLayers();
-    vesselBoxLayer.clearLayers();
+vesselBoxLayer.clearLayers();
+    clearHeadingVector();
     vesselDotsById.clear();
     vesselBoxesById.clear();
     setSarOverlay(false, { withoutNotice: true });
@@ -724,10 +733,78 @@ function drawVessels() {
     }
 }
 
+const HEADING_MIN_CONF = 0.15;
+const HEADING_MIN_M    = 900;
+const HEADING_LEN_MULT = 4;
+
+function destinationPoint(lat, lon, bearingDeg, metres) {
+    const R = 6371008.8;
+    const d = metres / R;
+    const b = bearingDeg * Math.PI / 180;
+    const p1 = lat * Math.PI / 180;
+    const l1 = lon * Math.PI / 180;
+
+    const p2 = Math.asin(Math.sin(p1) * Math.cos(d)
+                       + Math.cos(p1) * Math.sin(d) * Math.cos(b));
+    const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1),
+                               Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+
+    return [p2 * 180 / Math.PI, ((l2 * 180 / Math.PI) + 540) % 360 - 180];
+}
+
+function headingArrowLength(vessel) {
+    const hull = vessel.length_m || 150;
+    return Math.max(HEADING_MIN_M, hull * HEADING_LEN_MULT);
+}
+
+function clearHeadingVector() {
+    if (headingLayer) headingLayer.clearLayers();
+}
+
+function drawHeadingVector(vessel) {
+    clearHeadingVector();
+    if (!headingLayer || vessel.heading_deg == null) return;
+
+    const conf    = vessel.heading_confidence;
+    const unsure  = conf != null && conf < HEADING_MIN_CONF;
+    const colour  = vessel.dark ? paletteColor("--color-vessel-dark")
+                                : paletteColor("--color-scene");
+    const metres  = headingArrowLength(vessel);
+    const from    = [vessel.lat, vessel.lon];
+    const tip     = destinationPoint(vessel.lat, vessel.lon, vessel.heading_deg, metres);
+
+    L.polyline([from, tip], {
+        color: colour,
+        weight: 3,
+        opacity: 0.95,
+        dashArray: unsure ? "6 6" : null,
+        interactive: false,
+    }).addTo(headingLayer);
+
+    const barbLen = metres * 0.28;
+    [150, -150].forEach(offset => {
+        const barb = destinationPoint(tip[0], tip[1],
+                                      vessel.heading_deg + offset, barbLen);
+        L.polyline([tip, barb], {
+            color: colour, weight: 3, opacity: 0.95, interactive: false,
+        }).addTo(headingLayer);
+    });
+
+    if (unsure) {
+        const back = destinationPoint(vessel.lat, vessel.lon,
+                                      vessel.heading_deg + 180, metres * 0.55);
+        L.polyline([from, back], {
+            color: colour, weight: 2, opacity: 0.45,
+            dashArray: "3 7", interactive: false,
+        }).addTo(headingLayer);
+    }
+}
+
 function showShipCard(vessel) {
     highlightVesselDot(openVesselId, false);
     openVesselId = vessel.id;
     highlightVesselDot(vessel.id, true);
+    drawHeadingVector(vessel);
 
     const rows = [
         ["Status",     vessel.dark ? "Dark vessel (no AIS)" : "AIS reported"],
@@ -736,7 +813,11 @@ function showShipCard(vessel) {
         ["MMSI",       vessel.mmsi || "—"],
         ["Type",       vessel.type],
         ["Length",     vessel.length_m ? `${vessel.length_m} m` : ""],
-        ["Heading",    vessel.heading_deg != null ? `${vessel.heading_deg}°` : ""],
+        ["Heading",    vessel.heading_deg != null
+                        ? `${Math.round(vessel.heading_deg)}°`
+                          + (vessel.heading_confidence != null
+                             && vessel.heading_confidence < HEADING_MIN_CONF
+                                ? "  (direction uncertain)" : "") : ""],
         ["Speed",      vessel.speed_kn != null ? `${vessel.speed_kn} kn` : ""],
         ["Detected",   vessel.detected_at],
         ["Confidence", vessel.confidence != null
@@ -776,6 +857,7 @@ function showShipCard(vessel) {
 
 function hideShipCard() {
     shipCard.classList.add("is-hidden");
+    clearHeadingVector();
     highlightVesselDot(openVesselId, false);
     openVesselId = null;
 }
