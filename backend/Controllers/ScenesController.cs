@@ -95,19 +95,6 @@ public class ScenesController : ControllerBase
                                      SceneProjector.Swath(cached.Raw));
         }
 
-        CropSummary? crops = null;
-        var manifest = await _catalog.EnsureCropsManifestAsync(name, ct);
-        if (manifest is not null)
-        {
-            crops = new CropSummary(
-                Count: manifest["count"]?.GetValue<int>() ?? 0,
-                CropSize: manifest["crop_size"]?.GetValue<int>() ?? 0,
-                ThumbSize: manifest["thumb_size"]?.GetValue<int>() ?? 0,
-                BytesFull: manifest["bytes_full"]?.GetValue<long>() ?? 0,
-                BytesThumb: manifest["bytes_thumb"]?.GetValue<long>() ?? 0,
-                ManifestUrl: $"/api/scenes/{Uri.EscapeDataString(name)}/crops");
-        }
-
         return Ok(new SceneDetail(
             Id: name,
             Label: SceneProjector.Label(name, cached.Normalized["meta"] as JsonObject),
@@ -115,7 +102,6 @@ public class ScenesController : ControllerBase
             Totals: new SceneTotals(vessels.Count, vessels.Count(v => v.Dark)),
             Vessels: vessels,
             SarOverlay: overlay,
-            Crops: crops,
             Timings: SceneProjector.Timings(cached.Raw)));
     }
 
@@ -141,45 +127,6 @@ public class ScenesController : ControllerBase
         var path = await _catalog.EnsureOverviewAsync(name, ct);
         if (path is null)
             return NotFound(new { error = $"scene '{name}' has no overview render" });
-
-        return PhysicalFile(path, "image/jpeg", enableRangeProcessing: true);
-    }
-
-    [HttpGet("{name}/crops")]
-    public async Task<IActionResult> Crops(string name, [FromQuery] bool full, CancellationToken ct)
-    {
-        if (!Validation.IsSafeName(name))
-            return BadRequest(new { error = "invalid scene name" });
-
-        var manifest = await _catalog.EnsureCropsAsync(name, full, ct);
-        if (manifest is null)
-            return NotFound(new { error = $"scene '{name}' has no crops" });
-
-        var prefix = $"/api/scenes/{Uri.EscapeDataString(name)}/crops/";
-        if (manifest["crops"] is JsonArray crops)
-        {
-            foreach (var node in crops)
-            {
-                if (node is not JsonObject crop) continue;
-                if (crop["file"]?.GetValue<string>() is { } file)
-                    crop["file_url"] = prefix + file;
-                if (crop["thumb"]?.GetValue<string>() is { } thumb)
-                    crop["thumb_url"] = prefix + thumb;
-            }
-        }
-
-        return Content(manifest.ToJsonString(), "application/json");
-    }
-
-    [HttpGet("{name}/crops/{**relative}")]
-    public IActionResult Crop(string name, string relative)
-    {
-        if (!Validation.IsSafeName(name))
-            return BadRequest(new { error = "invalid scene name" });
-
-        var path = _catalog.ResolveCropFile(name, relative);
-        if (path is null)
-            return NotFound(new { error = $"no crop '{relative}' for scene '{name}'" });
 
         return PhysicalFile(path, "image/jpeg", enableRangeProcessing: true);
     }
@@ -212,7 +159,38 @@ public class ScenesController : ControllerBase
         var names = result.StdOut
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        return Ok(names);
+        var footprints = await AvailableFootprintsAsync(ct);
+
+        return Ok(names.Select(name => new
+        {
+            name,
+            corners = footprints.TryGetValue(name, out var quad) ? quad : null,
+        }));
+    }
+
+    private async Task<Dictionary<string, JsonNode?>> AvailableFootprintsAsync(CancellationToken ct)
+    {
+        var none = new Dictionary<string, JsonNode?>();
+        try
+        {
+            var result = await _client.RunAsync(new[] { "image-footprints" }, ct: ct);
+            if (result.ExitCode != 0)
+            {
+                _logger.LogWarning("image-footprints exited {Code}: {Err}",
+                                   result.ExitCode, result.StdErr.Trim());
+                return none;
+            }
+
+            if (JsonNode.Parse(result.StdOut) is not JsonObject parsed)
+                return none;
+
+            return parsed.ToDictionary(pair => pair.Key, pair => pair.Value?.DeepClone());
+        }
+        catch (Exception exc)
+        {
+            _logger.LogWarning(exc, "could not read image footprints");
+            return none;
+        }
     }
 
     [HttpPost("{name}/process")]

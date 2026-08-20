@@ -40,8 +40,6 @@ contract didn't change.
 | GET    | `/api/scenes/{name}`      | one scene with its vessels, in map-frontend shape |
 | GET    | `/api/scenes/{name}/raw`  | the detector's own JSON, normalised onto `meta`+`ships` |
 | GET    | `/api/scenes/{name}/overview` | `jetson_client.sh overview NAME` — the SAR overlay image |
-| GET    | `/api/scenes/{name}/crops` | `jetson_client.sh crops NAME` — the water-crop manifest |
-| GET    | `/api/scenes/{name}/crops/{path}` | one crop or thumbnail image |
 | POST   | `/api/scenes/sync`        | `jetson_client.sh get-all`, then reads the pulled JSONs back and returns them |
 | POST   | `/api/scenes/available`   | `jetson_client.sh list-images` — raw, not-yet-processed products |
 | POST   | `/api/scenes/{name}/process` | `jetson_client.sh process NAME` — runs detection on the Jetson, blocks until done |
@@ -76,25 +74,12 @@ a `jetson_client.sh` process over the link. `SceneCatalogService` caches them.
 A processed scene is immutable (its name carries the acquisition timestamp), so
 entries are only dropped when `POST /api/scenes/{name}/process` re-runs one.
 
-### Imagery: the overview and the water crops
+### Imagery: the overview
 
-These come from the detector's newer outputs and are pulled lazily, per scene,
-the first time they are asked for:
-
-* **The overview** is a decimated whole-scene render with the detections drawn
-  on it — a few hundred kB. It is served as the frontend's `sar_overlay`.
-* **The crops** are the scene's water, cut into 1024 px grayscale JPEGs, plus a
-  256 px thumbnail tier and a manifest describing every one.
-
-`GET /api/scenes/{name}/crops` pulls **only the thumbnail tier** (~2.5 MB for a
-whole scene). `?full=true` additionally pulls every crop at full resolution,
-which is tens of megabytes over the link — that tiering is the whole point, so
-do not make it the default. The manifest's relative paths are rewritten into
-`file_url` / `thumb_url` pointing back at this API, so a client never needs to
-know how the files are laid out on disk.
-
-Crop paths are resolved against the scene's own directory and anything that
-escapes it is refused, so a manifest path is never trusted as a filesystem path.
+This comes from the detector's newer output and is pulled lazily, per scene,
+the first time it is asked for: a decimated whole-scene render with the
+detections drawn on it, a few hundred kB, served as the frontend's
+`sar_overlay`.
 
 `POST /api/coords` expects a raw JSON body (the coordinates payload) and
 an optional `?name=` query param.

@@ -26,12 +26,6 @@ public class SceneCatalogService
     {
         _scenes.TryRemove(name, out _);
         TryDelete(OverviewPath(name));
-        var crops = CropsDir(name);
-        if (Directory.Exists(crops))
-        {
-            try { Directory.Delete(crops, recursive: true); }
-            catch (Exception ex) { _logger.LogWarning(ex, "could not clear {Dir}", crops); }
-        }
     }
 
     public async Task<IReadOnlyList<string>> ListNamesAsync(CancellationToken ct)
@@ -109,71 +103,6 @@ public class SceneCatalogService
             return null;
         }
         return path;
-    }
-
-    public string CropsDir(string name) => Path.Combine(_client.DestDir, name + "-crops");
-
-    public string CropsManifestPath(string name) => Path.Combine(CropsDir(name), "manifest.json");
-
-    public async Task<JsonObject?> EnsureCropsManifestAsync(string name, CancellationToken ct)
-    {
-        var manifest = CropsManifestPath(name);
-        if (File.Exists(manifest))
-            return await ReadManifestAsync(manifest, ct);
-
-        var result = await _client.RunAsync(new[] { "crops-manifest", name }, ct: ct);
-        if (!File.Exists(manifest))
-        {
-            _logger.LogInformation("scene {Scene} has no crops: {Err}", name, result.StdErr.Trim());
-            return null;
-        }
-
-        return await ReadManifestAsync(manifest, ct);
-    }
-
-    public async Task<JsonObject?> EnsureCropsAsync(string name, bool full, CancellationToken ct)
-    {
-        var args = full
-            ? new[] { "crops", name, "--full", "--tar" }
-            : new[] { "crops", name, "--tar" };
-
-        var manifest = CropsManifestPath(name);
-        if (!full && Directory.Exists(CropsDir(name)) && File.Exists(manifest)
-            && Directory.EnumerateFiles(CropsDir(name), "*.jpg", SearchOption.AllDirectories).Any())
-            return await ReadManifestAsync(manifest, ct);
-
-        var result = await _client.RunProcessAsync(args, ct);
-        if (!File.Exists(manifest))
-        {
-            _logger.LogInformation("scene {Scene} has no crops: {Err}", name, result.StdErr.Trim());
-            return null;
-        }
-        if (result.ExitCode != 0)
-            _logger.LogWarning("crops {Scene} finished with errors: {Err}", name, result.StdErr.Trim());
-
-        return await ReadManifestAsync(manifest, ct);
-    }
-
-    private async Task<JsonObject?> ReadManifestAsync(string path, CancellationToken ct)
-    {
-        try
-        {
-            return JsonNode.Parse(await File.ReadAllTextAsync(path, ct))!.AsObject();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "crop manifest {Path} is not valid JSON", path);
-            return null;
-        }
-    }
-
-    public string? ResolveCropFile(string name, string relative)
-    {
-        var root = Path.GetFullPath(CropsDir(name));
-        var full = Path.GetFullPath(Path.Combine(root, relative));
-        if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            return null;
-        return File.Exists(full) ? full : null;
     }
 
     private void TryDelete(string path)

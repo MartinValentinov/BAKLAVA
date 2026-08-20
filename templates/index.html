@@ -74,15 +74,6 @@
             <div class="picker__body" id="pickerBody"></div>
         </aside>
 
-        <aside class="timings is-hidden" id="timingsPanel">
-            <div class="timings__head">
-                <h2 class="timings__title">{{ settings.timings_title }}</h2>
-                <button class="timings__close" id="btnCloseTimings"
-                        aria-label="Close the timing panel">&times;</button>
-            </div>
-            <div class="timings__body" id="timingsBody"></div>
-        </aside>
-
         <aside class="ship-card is-hidden" id="shipCard">
             <div class="ship-card__head">
                 <h2 class="ship-card__title">{{ settings.ship_details_title }}</h2>
@@ -114,17 +105,6 @@
             </svg>
         </button>
 
-        <button class="control-button" id="btnTimings" aria-pressed="false" disabled
-                title="{{ settings.btn_timings_title }}"
-                aria-label="{{ settings.btn_timings_title }}">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <circle cx="12" cy="13" r="8"></circle>
-                <line x1="12" y1="13" x2="12" y2="9"></line>
-                <line x1="12" y1="13" x2="15" y2="15"></line>
-                <line x1="9" y1="2" x2="15" y2="2"></line>
-            </svg>
-        </button>
-
         <div class="switch-group is-disabled" id="switchDarkOnlyGroup">
             <span class="switch-group__label" id="switchDarkOnlyLabel">{{ settings.toggle_dark_label }}</span>
             <button class="switch" id="switchDarkOnly" role="switch" disabled
@@ -143,9 +123,11 @@
     <button class="sidebar__btn is-current" id="btnMenuScenes">SAR Scenes</button>
 
     <a class="sidebar__btn" id="linkAisArchive"
-       href="{{ settings.link_ais_archive }}">AIS Database Archive</a>
+       href="{{ settings.link_ais_archive }}"
+       target="_blank" rel="noopener noreferrer">Live AIS</a>
 
-    <button class="sidebar__btn" id="btnMenuDarkAlerts">Dark Vessel Alerts</button>
+    <a class="sidebar__btn" id="linkDemo"
+       href="{{ settings.link_demo }}">Pipeline walkthrough</a>
 </nav>
 
 <div class="popup-overlay is-hidden" id="popupOverlay">

@@ -46,13 +46,4 @@ public record SceneDetail(
     [property: JsonPropertyName("totals")] SceneTotals Totals,
     [property: JsonPropertyName("vessels")] IReadOnlyList<VesselDto> Vessels,
     [property: JsonPropertyName("sar_overlay")] SarOverlay? SarOverlay,
-    [property: JsonPropertyName("crops")] CropSummary? Crops,
     [property: JsonPropertyName("timings")] IReadOnlyList<TimingStage>? Timings);
-
-public record CropSummary(
-    [property: JsonPropertyName("count")] int Count,
-    [property: JsonPropertyName("crop_size")] int CropSize,
-    [property: JsonPropertyName("thumb_size")] int ThumbSize,
-    [property: JsonPropertyName("bytes_full")] long BytesFull,
-    [property: JsonPropertyName("bytes_thumb")] long BytesThumb,
-    [property: JsonPropertyName("manifest_url")] string ManifestUrl);

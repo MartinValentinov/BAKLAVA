@@ -14,7 +14,9 @@
     --color-on-sar:  #FFFFFF;
     --color-alert:   #D0342C;
 
-    --color-scene:        #2F6FD0;
+    --color-scene:        #2E8B57;
+    --color-scene-todo:   #D0342C;
+    --color-scene-busy:   #E0921F;
     --color-scene-picked: var(--color-dark);
     --color-vessel-safe:  var(--color-dark);
     --color-vessel-dark:  var(--color-alert);

@@ -17,11 +17,6 @@ const scenePicker           = document.getElementById("scenePicker");
 const pickerBody            = document.getElementById("pickerBody");
 const btnClosePicker        = document.getElementById("btnClosePicker");
 
-const timingsPanel          = document.getElementById("timingsPanel");
-const timingsBody           = document.getElementById("timingsBody");
-const btnCloseTimings       = document.getElementById("btnCloseTimings");
-const btnTimings            = document.getElementById("btnTimings");
-
 const btnPickScene          = document.getElementById("btnPickScene");
 const btnSarOverlay         = document.getElementById("btnSarOverlay");
 const switchDarkOnly        = document.getElementById("switchDarkOnly");
@@ -32,7 +27,6 @@ const btnCloseMenu          = document.getElementById("btnCloseMenu");
 const sidebar               = document.getElementById("sidebar");
 const sidebarBackdrop       = document.getElementById("sidebarBackdrop");
 const btnMenuScenes         = document.getElementById("btnMenuScenes");
-const btnMenuDarkAlerts     = document.getElementById("btnMenuDarkAlerts");
 
 const popupOverlay          = document.getElementById("popupOverlay");
 const popupMessage          = document.getElementById("popupMessage");
@@ -53,10 +47,11 @@ let isPickingScene      = false;
 let selectedScene       = null;
 let showOnlyDarkVessels = false;
 let sarOverlayOn        = false;
-let lastClientMs        = null;
 let openVesselId        = null;
 let vesselDotsById      = new Map();
 let vesselBoxesById     = new Map();
+let imageFootprints     = new Map();
+let processingImage     = null;
 
 const DOT_HIDE_FROM_ZOOM = 12;
 
@@ -196,8 +191,15 @@ async function loadAvailableImages() {
         if (!response.ok) {
             throw new Error(`Server answered ${response.status}`);
         }
-        const names = await response.json();
-        return Array.isArray(names) ? names : [];
+        const rows = await response.json();
+        if (!Array.isArray(rows)) return [];
+
+        imageFootprints = new Map();
+        return rows.map(row => {
+            if (typeof row === "string") return row;
+            if (row.corners) imageFootprints.set(row.name, row.corners);
+            return row.name;
+        });
     } catch (error) {
         notify(BAKLAVA_SETTINGS.msg_images_failed, "error");
         console.error(error);
@@ -216,6 +218,7 @@ const SEA_REGIONS = [
     { name: "Ligurian Sea",    lat: [42.8, 44.6], lon: [7.0,  10.0] },
     { name: "Balearic Sea",    lat: [37.8, 43.8], lon: [0.0,   9.0] },
     { name: "Alboran Sea",     lat: [34.8, 37.6], lon: [-6.0,  0.0] },
+    { name: "Algerian Basin",  lat: [35.0, 38.5], lon: [0.0,   9.5] },
     { name: "Levantine Sea",   lat: [30.5, 37.2], lon: [28.0, 36.6] },
     { name: "Libyan Sea",      lat: [30.0, 35.6], lon: [15.0, 25.0] },
     { name: "Strait of Sicily", lat: [33.0, 38.0], lon: [10.0, 15.0] },
@@ -301,23 +304,63 @@ function isSafeProduct(imageName) {
     return imageName.toLowerCase().endsWith(".safe");
 }
 
+function imagePlace(imageName) {
+    const corners = imageFootprints.get(imageName);
+    if (!corners) return null;
+    const centre = sceneCentre(corners);
+    if (!centre) return null;
+    return {
+        region: regionName(centre[0], centre[1]),
+        coords: shortCoords(centre[0], centre[1]),
+    };
+}
+
+function imageDisplayLabel(imageName) {
+    const place = imagePlace(imageName);
+    const parts = sentinelParts(imageName);
+    const when  = parts ? formatWhen(parts.when) : imageName;
+    if (!place) return imageDisplayName(imageName);
+    return `${place.region || place.coords} \u2014 ${when}`;
+}
+
 function sceneIdForImage(imageName) {
     return imageName.replace(/\.[^.]+$/, "") + "__cpp";
 }
 
-function drawScenePickerBoxes(scenes) {
+function sceneBoxStyle(state) {
+    const token = state === "todo" ? "--color-scene-todo"
+                : state === "busy" ? "--color-scene-busy"
+                : "--color-scene";
+    return {
+        color: paletteColor(token),
+        weight: 2,
+        dashArray: state === "todo" ? "7 5" : null,
+        fillColor: paletteColor(token),
+        fillOpacity: state === "busy" ? 0.3 : 0.18,
+    };
+}
+
+function drawScenePickerBoxes(scenes, images = []) {
     scenePickerLayer.clearLayers();
 
     scenes.forEach(scene => {
-        const box = L.polygon(scene.corners, {
-            color: paletteColor("--color-scene"),
-            weight: 2,
-            fillColor: paletteColor("--color-scene"),
-            fillOpacity: 0.18,
-        });
-
+        const box = L.polygon(scene.corners, sceneBoxStyle("done"));
         box.bindTooltip(sceneDisplayName(scene), { sticky: true });
         box.on("click", () => selectScene(scene.id));
+        box.addTo(scenePickerLayer);
+    });
+
+    images.forEach(imageName => {
+        const corners = imageFootprints.get(imageName);
+        if (!corners) return;
+
+        const busy = processingImage === imageName;
+        const box = L.polygon(corners, sceneBoxStyle(busy ? "busy" : "todo"));
+        const label = imageDisplayLabel(imageName);
+
+        box.bindTooltip(busy ? `${label} \u2014 processing\u2026`
+                             : `${label} \u2014 not processed yet`, { sticky: true });
+        if (!busy) box.on("click", () => confirmProcess(imageName));
         box.addTo(scenePickerLayer);
     });
 }
@@ -384,13 +427,14 @@ function renderPicker(scenes, images) {
         addPickerNote(BAKLAVA_SETTINGS.picker_no_available);
     } else {
         images.forEach(image => {
+            const place = imagePlace(image);
             const parts = sentinelParts(image);
             addPickerItem({
-                name: imageDisplayName(image),
-                note: parts ? `${parts.mode} ${parts.product}` : image,
+                name: imageDisplayLabel(image),
+                note: place ? place.coords : (parts ? `${parts.mode} ${parts.product}` : image),
                 tag: isSafeProduct(image) ? "SAFE" : "TIF",
                 tagKind: isSafeProduct(image) ? "safe" : null,
-                onPick: () => processImage(image),
+                onPick: () => confirmProcess(image),
             });
         });
     }
@@ -423,10 +467,13 @@ async function startScenePicking({ refresh = false } = {}) {
         closeScene({ withoutReopeningPicker: true });
     }
 
-    const [scenes, images] = await runWithLoader(() => Promise.all([
+    const [scenes, allImages] = await runWithLoader(() => Promise.all([
         loadSceneList({ refresh }),
         loadAvailableImages(),
     ]));
+
+    const done = new Set(scenes.map(scene => scene.id));
+    const images = allImages.filter(name => !done.has(sceneIdForImage(name)));
 
     isPickingScene = true;
     btnPickScene.classList.add("is-active");
@@ -436,20 +483,32 @@ async function startScenePicking({ refresh = false } = {}) {
     renderPicker(scenes, images);
     openPicker();
 
-    drawScenePickerBoxes(scenes);
+    drawScenePickerBoxes(scenes, images);
 
     map.invalidateSize();
-    if (scenes.length) {
+    if (scenes.length || scenePickerLayer.getLayers().length) {
         map.fitBounds(scenePickerLayer.getBounds(), { padding: [40, 40] });
         notify(BAKLAVA_SETTINGS.msg_pick_scene, "info");
     }
 }
 
+function confirmProcess(imageName) {
+    const label = imageDisplayLabel(imageName);
+    if (!window.confirm(
+            `${BAKLAVA_SETTINGS.confirm_process_title}\n\n${label}\n\n`
+            + BAKLAVA_SETTINGS.confirm_process_body)) {
+        return;
+    }
+    processImage(imageName);
+}
+
 async function processImage(imageName) {
     closePicker();
 
+    processingImage = imageName;
+    drawScenePickerBoxes(cachedSceneList || [], [...imageFootprints.keys()]);
+
     let failure = null;
-    const startedAt = performance.now();
     await runWithLoader(async () => {
         try {
             const response = await fetch(
@@ -466,7 +525,7 @@ async function processImage(imageName) {
         }
     }, BAKLAVA_SETTINGS.msg_processing);
 
-    lastClientMs = performance.now() - startedAt;
+    processingImage = null;
 
     const sceneId = sceneIdForImage(imageName);
     const scenes  = await loadSceneList({ refresh: true });
@@ -539,10 +598,6 @@ async function selectScene(sceneId) {
 
     setSceneControlsEnabled(true);
     setShowOnlyDarkVessels(true);
-
-    if (!timingsPanel.classList.contains("is-hidden")) {
-        renderTimings();
-    }
 }
 
 function closeScene(options = {}) {
@@ -558,7 +613,6 @@ function closeScene(options = {}) {
     setSarOverlay(false, { withoutNotice: true });
 
     statsBar.classList.add("is-hidden");
-    setTimingsVisible(false);
     setShowOnlyDarkVessels(false);
     setSceneControlsEnabled(false);
 
@@ -567,74 +621,7 @@ function closeScene(options = {}) {
     }
 }
 
-function formatMs(ms) {
-    return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
-}
-
-function renderTimings() {
-    timingsBody.innerHTML = "";
-
-    const stages = (selectedScene && selectedScene.timings) || [];
-    if (!stages.length && lastClientMs === null) {
-        const note = document.createElement("p");
-        note.className   = "timings__empty";
-        note.textContent = BAKLAVA_SETTINGS.timings_none;
-        timingsBody.appendChild(note);
-        return;
-    }
-
-    const rows = stages.map(stage => ({
-        name: stage.stage,
-        ms: stage.ms,
-        total: /^total$/i.test(stage.stage),
-    }));
-
-    if (lastClientMs !== null) {
-        rows.push({
-            name: BAKLAVA_SETTINGS.timings_client_label,
-            ms: lastClientMs,
-            client: true,
-        });
-    }
-
-    const widest = Math.max(...rows.map(row => row.ms), 1);
-
-    rows.forEach(row => {
-        const item = document.createElement("div");
-        item.className = "timings__row"
-            + (row.total ? " is-total" : "")
-            + (row.client ? " is-client" : "");
-
-        const name = document.createElement("span");
-        name.className   = "timings__name";
-        name.textContent = row.name;
-
-        const value = document.createElement("span");
-        value.className   = "timings__ms";
-        value.textContent = formatMs(row.ms);
-
-        const bar = document.createElement("div");
-        bar.className = "timings__bar";
-        bar.style.width = `${Math.max(1, (row.ms / widest) * 100)}%`;
-
-        item.appendChild(name);
-        item.appendChild(value);
-        item.appendChild(bar);
-        timingsBody.appendChild(item);
-    });
-}
-
-function setTimingsVisible(visible) {
-    timingsPanel.classList.toggle("is-hidden", !visible);
-    btnTimings.classList.toggle("is-active", visible);
-    btnTimings.setAttribute("aria-pressed", visible ? "true" : "false");
-    if (visible) {
-        renderTimings();
-    }
-}
-
 function setSceneControlsEnabled(enabled) {
-    btnTimings.disabled     = !enabled;
     btnSarOverlay.disabled  = !enabled;
     switchDarkOnly.disabled = !enabled;
     switchDarkOnlyGroup.classList.toggle("is-disabled", !enabled);
@@ -1007,21 +994,11 @@ btnCloseShipCard.addEventListener("click", hideShipCard);
 
 btnClosePicker.addEventListener("click", () => stopScenePicking());
 
-btnTimings.addEventListener("click", () => {
-    setTimingsVisible(timingsPanel.classList.contains("is-hidden"));
-});
-
-btnCloseTimings.addEventListener("click", () => setTimingsVisible(false));
-
 btnOpenMenu.addEventListener("click", openSidebar);
 btnCloseMenu.addEventListener("click", closeSidebar);
 sidebarBackdrop.addEventListener("click", closeSidebar);
 
 btnMenuScenes.addEventListener("click", closeSidebar);
-btnMenuDarkAlerts.addEventListener("click", () => {
-    closeSidebar();
-    showPopup("Under construction!");
-});
 
 btnClosePopup.addEventListener("click", hidePopup);
 popupOverlay.addEventListener("click", (event) => {
@@ -1051,6 +1028,8 @@ window.BAKLAVA = {
     startScenePicking,
     stopScenePicking,
     loadAvailableImages,
+    drawScenePickerBoxes,
+    confirmProcess,
     processImage,
     selectScene,
     closeScene,
@@ -1069,4 +1048,7 @@ window.BAKLAVA = {
     get map()    { return map; },
     get scene()  { return selectedScene; },
     get scenes() { return cachedSceneList; },
+    get footprints() { return imageFootprints; },
+    get processing() { return processingImage; },
+    set processing(name) { processingImage = name; },
 };

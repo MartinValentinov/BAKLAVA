@@ -24,11 +24,6 @@ APP_SETTINGS = {
 
     "ship_details_title": "Ship details:",
 
-    "btn_timings_title": "Show how long each stage took",
-    "timings_title": "Processing time",
-    "timings_none": "No timing recorded for this scene",
-    "timings_client_label": "browser fetch",
-
     "picker_title": "Scenes",
     "picker_processed_label": "On the map",
     "picker_available_label": "Ready to process",
@@ -36,7 +31,8 @@ APP_SETTINGS = {
     "picker_no_processed": "No scene has been processed yet",
     "picker_no_available": "Every image on the Jetson has been processed",
 
-    "link_ais_archive": "https://supm.online/ais/",
+    "link_ais_archive": "https://www.marinetraffic.com",
+    "link_demo": os.environ.get("BAKLAVA_DEMO_URL", "http://localhost:5001/"),
 
     "msg_scenes_failed":  "Could not load the scenes. Try again.",
     "msg_scene_failed":   "Could not load that scene. Try again.",
@@ -49,6 +45,9 @@ APP_SETTINGS = {
     "msg_process_failed": "Processing failed",
     "msg_process_done":   "Processed",
 
+    "confirm_process_title": "Process this scene on the Jetson?",
+    "confirm_process_body":  "It runs the full pipeline and can take several minutes.",
+
     "map_default_lat": 42.0,
     "map_default_lon": 20.0,
     "map_default_zoom": 5,
@@ -57,7 +56,6 @@ APP_SETTINGS = {
 BACKEND_URL = os.environ.get("BAKLAVA_BACKEND_URL", "http://localhost:5080")
 BACKEND_TIMEOUT = 150
 PROCESS_TIMEOUT = 1800
-
 
 def _backend_open(path, range_header=None, method="GET", timeout=None):
     req = urllib.request.Request(
@@ -124,19 +122,6 @@ def api_scene(scene_id):
 @app.route("/api/scenes/<scene_id>/overview")
 def api_scene_overview(scene_id):
     return _proxy_binary(f"/api/scenes/{urllib.parse.quote(scene_id, safe='')}/overview", "image/jpeg")
-
-
-@app.route("/api/scenes/<scene_id>/crops")
-def api_scene_crops(scene_id):
-    qs = "?full=true" if request.args.get("full") else ""
-    return _proxy_json(f"/api/scenes/{urllib.parse.quote(scene_id, safe='')}/crops{qs}")
-
-
-@app.route("/api/scenes/<scene_id>/crops/<path:relative>")
-def api_scene_crop(scene_id, relative):
-    enc = urllib.parse.quote(scene_id, safe="")
-    enc_rel = urllib.parse.quote(relative, safe="/")
-    return _proxy_binary(f"/api/scenes/{enc}/crops/{enc_rel}", "image/jpeg")
 
 
 if __name__ == "__main__":
