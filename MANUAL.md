@@ -394,6 +394,7 @@ output file, not reconstructed from memory:
       "confidence": 0.8875916,
       "center": {"lon": 29.106831302, "lat": 44.086974714},
       "heading_deg": 126.756777302,
+      "heading_confidence": 0.421875,
       "length_m": 226.875,
       "width_m": 109.53125,
       "corners_lonlat": [[...], [...], [...], [...]],
@@ -407,9 +408,12 @@ output file, not reconstructed from memory:
   **start** (from the filename) — identical across all detections in a
   scene, not a per-detection timestamp. `sensing_start`/`sensing_stop` are
   both given at the top level if you need the full window.
-- `heading_deg` is a 0–180 axis (long-axis true-north bearing), not a 0–360
-  course — an oriented box carries no bow/stern information (see
-  `detection.hpp`'s comment on `GeoDet::heading_deg`).
+- `heading_deg` is a 0–360 true-north bearing, bow-first. The OBB itself only
+  gives a 0–180 axis, so which end is the bow is picked by a GPU shape
+  heuristic (`k_estimate_heading` in `detect/kernels.cu`) — see
+  `detection.hpp`'s comment on `GeoDet::heading_deg` and `pipeline/README.md`.
+  `heading_confidence` (0–1) says how asymmetric the two ends looked; treat
+  anything below ~0.3 as an unconfirmed bow guess, not a course to act on.
 - Land masking uses each detection's **centre**, tested against exact vector
   geometry — a different, more precise check than the coarse raster used
   only to skip whole tiles before inference.

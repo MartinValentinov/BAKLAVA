@@ -479,18 +479,45 @@ static int runOnce(const Config& cfg) {
                      dropped, cfg.buffer_m, sea.size());
     }
 
+    Det* dSea = nullptr;
+    float* dDirSign = nullptr;
+    std::vector<float> dirSign, dirConf;
+    if (!sea.empty()) {
+        Timer t("heading direction");
+        CUDA_CHECK(cudaMalloc(&dSea, sea.size() * sizeof(Det)));
+        CUDA_CHECK(cudaMemcpy(dSea, sea.data(), sea.size() * sizeof(Det),
+                              cudaMemcpyHostToDevice));
+
+        float* dDirConf = nullptr;
+        CUDA_CHECK(cudaMalloc(&dDirSign, sea.size() * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&dDirConf, sea.size() * sizeof(float)));
+
+        launch_estimate_heading(grayDev, W, H, dSea, int(sea.size()), dDirSign, dDirConf, 0);
+        CUDA_CHECK(cudaDeviceSynchronize());
+
+        dirSign.resize(sea.size());
+        dirConf.resize(sea.size());
+        CUDA_CHECK(cudaMemcpy(dirSign.data(), dDirSign, sea.size() * sizeof(float),
+                              cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(dirConf.data(), dDirConf, sea.size() * sizeof(float),
+                              cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaFree(dDirConf));
+        t.report();
+    }
+
     std::vector<GeoDet> out;
     out.reserve(sea.size());
-    for (const Det& d : sea) {
+    for (size_t i = 0; i < sea.size(); ++i) {
+        const Det& d = sea[i];
         GeoDet g{};
         const double ca = std::cos(d.angle), sa = std::sin(d.angle);
         const double hw = d.w * 0.5, hh = d.h * 0.5;
         const double ox[4] = {-hw,  hw, hw, -hw};
         const double oy[4] = {-hh, -hh, hh,  hh};
-        for (int i = 0; i < 4; ++i) {
-            g.px[i] = d.cx + ox[i] * ca - oy[i] * sa;
-            g.py[i] = d.cy + ox[i] * sa + oy[i] * ca;
-            scene.pixelToLonLat(g.px[i], g.py[i], g.lon[i], g.lat[i]);
+        for (int k = 0; k < 4; ++k) {
+            g.px[k] = d.cx + ox[k] * ca - oy[k] * sa;
+            g.py[k] = d.cy + ox[k] * sa + oy[k] * ca;
+            scene.pixelToLonLat(g.px[k], g.py[k], g.lon[k], g.lat[k]);
         }
         scene.pixelToLonLat(d.cx, d.cy, g.center_lon, g.center_lat);
 
@@ -498,11 +525,13 @@ static int runOnce(const Config& cfg) {
         g.length_m = std::max(d.w, d.h) * px;
         g.width_m  = std::min(d.w, d.h) * px;
 
-        const double ux = (d.w >= d.h) ? ca : -sa;
-        const double uy = (d.w >= d.h) ? sa :  ca;
+        const double sgn = double(dirSign[i]);
+        const double ux = ((d.w >= d.h) ? ca : -sa) * sgn;
+        const double uy = ((d.w >= d.h) ? sa :  ca) * sgn;
         double bearing = 0.0;
         scene.pixelDirToBearing(d.cx, d.cy, ux, uy, bearing);
-        g.heading_deg = std::fmod(std::fmod(bearing, 180.0) + 180.0, 180.0);
+        g.heading_deg = std::fmod(bearing + 360.0, 360.0);
+        g.heading_confidence = dirConf[i];
 
         g.score = d.score;
         out.push_back(g);
@@ -541,6 +570,7 @@ static int runOnce(const Config& cfg) {
             f << "      \"center\": {\"lon\": " << g.center_lon
               << ", \"lat\": " << g.center_lat << "},\n";
             f << "      \"heading_deg\": " << g.heading_deg << ",\n";
+            f << "      \"heading_confidence\": " << g.heading_confidence << ",\n";
             f << "      \"length_m\": " << g.length_m
               << ", \"width_m\": " << g.width_m << ",\n";
             f << "      \"corners_lonlat\": [";
@@ -568,13 +598,6 @@ static int runOnce(const Config& cfg) {
         t.report();
     }
 
-    Det* dSea = nullptr;
-    if (!sea.empty() && (!cfg.out_overview.empty() || !cfg.out_jpg.empty())) {
-        CUDA_CHECK(cudaMalloc(&dSea, sea.size() * sizeof(Det)));
-        CUDA_CHECK(cudaMemcpy(dSea, sea.data(), sea.size() * sizeof(Det),
-                              cudaMemcpyHostToDevice));
-    }
-
     if (!cfg.out_overview.empty()) {
         Timer t("overview render");
         const int f = std::max(1, (std::max(W, H) + cfg.overview_max - 1) / cfg.overview_max);
@@ -585,9 +608,14 @@ static int runOnce(const Config& cfg) {
             std::fprintf(stderr, "[jpeg] cannot allocate the overview buffer; skipping\n");
         } else {
             launch_overview_rgb(grayDev, W, H, f, dRGB, ow, oh, 0);
-            if (dSea && cfg.box_thickness > 0)
-                launch_draw_boxes(dRGB, ow, oh, dSea, int(sea.size()),
-                                  std::max(1, cfg.box_thickness / f), 1.0f / float(f), 0);
+            if (dSea && cfg.box_thickness > 0) {
+                const int th = std::max(1, cfg.box_thickness / f);
+                const float sc = 1.0f / float(f);
+                launch_draw_boxes(dRGB, ow, oh, dSea, int(sea.size()), th, sc, 0);
+                if (dDirSign)
+                    launch_draw_heading_arrows(dRGB, ow, oh, dSea, dDirSign,
+                                               int(sea.size()), th, sc, 0);
+            }
             CUDA_CHECK(cudaDeviceSynchronize());
 
             std::vector<uint8_t> host(size_t(ow) * oh * 3);
@@ -612,9 +640,13 @@ static int runOnce(const Config& cfg) {
                          rgbBytes / 1e9);
         } else {
             launch_render_rgb(grayDev, W, H, dRGB, 0);
-            if (dSea && cfg.box_thickness > 0)
+            if (dSea && cfg.box_thickness > 0) {
                 launch_draw_boxes(dRGB, W, H, dSea, int(sea.size()),
                                   cfg.box_thickness, 1.0f, 0);
+                if (dDirSign)
+                    launch_draw_heading_arrows(dRGB, W, H, dSea, dDirSign,
+                                               int(sea.size()), cfg.box_thickness, 1.0f, 0);
+            }
             CUDA_CHECK(cudaDeviceSynchronize());
             encodeJpegRGB(dRGB, W, H, cfg.jpeg_quality, cfg.out_jpg, 0);
             CUDA_CHECK(cudaFree(dRGB));
@@ -623,6 +655,7 @@ static int runOnce(const Config& cfg) {
     }
 
     if (dSea) CUDA_CHECK(cudaFree(dSea));
+    if (dDirSign) CUDA_CHECK(cudaFree(dDirSign));
     if (grayHost) CUDA_CHECK(cudaFreeHost(grayHost));
     else if (grayDev) CUDA_CHECK(cudaFree(grayDev));
 

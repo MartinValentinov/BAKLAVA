@@ -295,6 +295,7 @@ test is eroded by one cell first, so the test is conservative.
       "confidence": 0.87,
       "center": {"lon": 29.1, "lat": 44.2},
       "heading_deg": 37.4,
+      "heading_confidence": 0.62,
       "length_m": 180.0, "width_m": 25.0,
       "corners_lonlat": [[...], [...], [...], [...]],
       "corners_pixel":  [[...], [...], [...], [...]]
@@ -307,11 +308,26 @@ test is eroded by one cell first, so the test is conservative.
 every detection. `sensing_start` and `sensing_stop` are both in the header if
 you later want to interpolate along azimuth.
 
-`heading_deg` is the long-axis orientation as a true-north bearing folded to
-0–180. It is computed by projecting two points to WGS84 and taking the geodetic
-azimuth, so UTM grid convergence is handled without a convergence formula. The
-range is 0–180 rather than 0–360 because an oriented box carries no bow/stern
-information — this is an axis, not a course.
+`heading_deg` is a full 0–360 true-north bearing — the direction the vessel is
+inferred to be pointing (bow-first), not just the long-axis orientation. It is
+computed by projecting two points to WGS84 and taking the geodetic azimuth, so
+UTM grid convergence is handled without a convergence formula.
+
+The oriented box alone only gives a 0–180 axis; an OBB carries no bow/stern
+information. To pick which end is the bow, `detect/kernels.cu`'s
+`k_estimate_heading` samples the quantised grayscale image in a grid along the
+box's major/minor axes and compares mean intensity at the two ends: the end
+diluted by more background water (because it tapers to a point) is called the
+bow, and `heading_deg` points that way. This is a cheap shape/backscatter
+heuristic, not a physical measurement — the pipeline works from GRD amplitude
+only (no SLC phase, so no Doppler-based velocity), and there is no wake
+analysis. `heading_confidence` (0–1) is how large the intensity gap between
+the two ends was, normalised; low values mean the two ends looked similar and
+the bow pick is close to a coin flip. Treat sub-~0.3 confidence as "axis known,
+direction unconfirmed" rather than a trustworthy course.
+
+The debug/overview renders draw this as a yellow arrow per detection (red box
++ arrow), via `output/kernels.cu`'s `k_draw_arrows`.
 
 ## Water crops
 

@@ -102,3 +102,81 @@ void launch_draw_boxes(uint8_t* rgb, int W, int H,
     k_draw_boxes<<<CDIV(n * 4, threads), threads, 0, s>>>(rgb, W, H, dets, n,
                                                           thickness, scale);
 }
+
+__device__ __forceinline__ void draw_seg(uint8_t* __restrict__ rgb, int W, int H,
+                                         float ax, float ay, float bx, float by,
+                                         int r, uint8_t cr, uint8_t cg, uint8_t cb) {
+    const float dx = bx - ax, dy = by - ay;
+    const float len = sqrtf(dx * dx + dy * dy);
+    const int steps = max(1, (int)(len * 2.0f));
+    for (int s = 0; s <= steps; ++s) {
+        const float t = (float)s / steps;
+        const int px = __float2int_rn(ax + dx * t);
+        const int py = __float2int_rn(ay + dy * t);
+        for (int oy = -r; oy <= r; ++oy) {
+            for (int ox = -r; ox <= r; ++ox) {
+                const int x = px + ox, y = py + oy;
+                if (x < 0 || x >= W || y < 0 || y >= H) continue;
+                const size_t o = (size_t(y) * W + x) * 3;
+                rgb[o + 0] = cr;
+                rgb[o + 1] = cg;
+                rgb[o + 2] = cb;
+            }
+        }
+    }
+}
+
+__global__ void k_draw_arrows(uint8_t* __restrict__ rgb, int W, int H,
+                              const Det* __restrict__ dets,
+                              const float* __restrict__ dirSign,
+                              int n, int th, float scale) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+
+    const Det d = dets[i];
+    const float ca = __cosf(d.angle), sa = __sinf(d.angle);
+    const float u0x = (d.w >= d.h) ? ca : -sa;
+    const float u0y = (d.w >= d.h) ? sa :  ca;
+    const float vx = -u0y, vy = u0x;
+
+    const float sgn = dirSign[i];
+    const float ux = u0x * sgn, uy = u0y * sgn;
+
+    const float L    = fmaxf(d.w, d.h);
+    const float half = L * 0.5f;
+    const float tailLen = fminf(half, L * 0.35f);
+    const float headLen = fmaxf(6.0f, fminf(half * 0.6f, 40.0f));
+
+    const float tailX = d.cx - ux * tailLen;
+    const float tailY = d.cy - uy * tailLen;
+    const float tipX  = d.cx + ux * (half + headLen * 0.6f);
+    const float tipY  = d.cy + uy * (half + headLen * 0.6f);
+
+    const int r = max(1, th / 2);
+    const uint8_t cr = 255, cg = 255, cb = 0;   // yellow, distinct from the red box
+
+    draw_seg(rgb, W, H, tailX * scale, tailY * scale, tipX * scale, tipY * scale,
+            r, cr, cg, cb);
+
+    constexpr float HEAD_ANGLE = 0.5236f;   // 30 degrees
+    const float ca2 = cosf(HEAD_ANGLE), sa2 = sinf(HEAD_ANGLE);
+    const float bx = -ux, by = -uy;
+    const float h1x = bx * ca2 + vx * sa2, h1y = by * ca2 + vy * sa2;
+    const float h2x = bx * ca2 - vx * sa2, h2y = by * ca2 - vy * sa2;
+
+    draw_seg(rgb, W, H, tipX * scale, tipY * scale,
+            (tipX + h1x * headLen) * scale, (tipY + h1y * headLen) * scale,
+            r, cr, cg, cb);
+    draw_seg(rgb, W, H, tipX * scale, tipY * scale,
+            (tipX + h2x * headLen) * scale, (tipY + h2y * headLen) * scale,
+            r, cr, cg, cb);
+}
+
+void launch_draw_heading_arrows(uint8_t* rgb, int W, int H,
+                                const Det* dets, const float* dirSign, int n,
+                                int thickness, float scale, cudaStream_t s) {
+    if (n <= 0) return;
+    const int threads = 128;
+    k_draw_arrows<<<CDIV(n, threads), threads, 0, s>>>(rgb, W, H, dets, dirSign, n,
+                                                        thickness, scale);
+}

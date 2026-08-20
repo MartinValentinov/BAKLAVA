@@ -236,3 +236,61 @@ void launch_rotated_nms_mask(const Det* dets, int n, float iouThr,
     dim3 grid(CDIV(n, NMS_BLOCK), CDIV(n, NMS_BLOCK));
     k_nms_mask<<<grid, NMS_BLOCK, 0, s>>>(dets, n, iouThr, mask, colBlocks);
 }
+
+__global__ void k_estimate_heading(const uint8_t* __restrict__ gray, int W, int H,
+                                   const Det* __restrict__ dets, int n,
+                                   float* __restrict__ dirSign,
+                                   float* __restrict__ dirConf) {
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+
+    const Det d = dets[i];
+    const float ca = __cosf(d.angle), sa = __sinf(d.angle);
+    const float ux = (d.w >= d.h) ? ca : -sa;
+    const float uy = (d.w >= d.h) ? sa :  ca;
+    const float vx = -uy, vy = ux;
+
+    const float L  = fmaxf(d.w, d.h);
+    const float Wd = fmaxf(2.0f, fminf(d.w, d.h));
+
+    constexpr int NBIN = 24;
+    constexpr int NSAMP = 9;
+    constexpr int NEND = 5;
+
+    float end0 = 0.0f, end1 = 0.0f;
+    for (int b = 0; b < NBIN; ++b) {
+        const float s = ((b + 0.5f) / NBIN - 0.5f) * L;
+        float sum = 0.0f;
+        int cnt = 0;
+        for (int t = 0; t < NSAMP; ++t) {
+            const float tt = ((t + 0.5f) / NSAMP - 0.5f) * Wd;
+            const float px = d.cx + s * ux + tt * vx;
+            const float py = d.cy + s * uy + tt * vy;
+            const int xi = __float2int_rn(px);
+            const int yi = __float2int_rn(py);
+            if (xi < 0 || xi >= W || yi < 0 || yi >= H) continue;
+            sum += float(gray[size_t(yi) * W + xi]);
+            ++cnt;
+        }
+        const float mean = cnt ? sum / cnt : 0.0f;
+        if (b < NEND)            end0 += mean;
+        if (b >= NBIN - NEND)    end1 += mean;
+    }
+    end0 /= NEND;
+    end1 /= NEND;
+
+    // dimmer end is diluted by more background water -> tapered -> the bow
+    const float asym = end1 - end0;
+    dirSign[i] = (asym > 0.0f) ? -1.0f : 1.0f;
+    dirConf[i] = fminf(1.0f, fabsf(asym) / 64.0f);
+}
+
+void launch_estimate_heading(const uint8_t* gray, int W, int H,
+                             const Det* dets, int n,
+                             float* dirSign, float* dirConf,
+                             cudaStream_t s) {
+    if (n <= 0) return;
+    const int threads = 128;
+    k_estimate_heading<<<CDIV(n, threads), threads, 0, s>>>(gray, W, H, dets, n,
+                                                             dirSign, dirConf);
+}

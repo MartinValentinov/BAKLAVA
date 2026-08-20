@@ -59,11 +59,11 @@ everything downstream turns its output into coordinates on Earth.
 |---|---|
 | `engine.cpp/.hpp` | Loads the ONNX model, builds a TensorRT engine (once, then cached to disk), runs inference. `introspect()` is the gatekeeper — it **refuses to load a model whose output isn't exactly 6 channels**, because the decode kernel assumes that layout. |
 | `int8calib.cpp/.hpp` | INT8 quantisation. Feeds a few hundred real tiles through the network at build time so TensorRT can pick number ranges. Roughly 1.5–2× faster than FP16 on Orin. Optional — `--int8-data`. |
-| `detection.hpp` | The two structs everything passes around. `Det` is a box in tile pixels; `GeoDet` is the same box in longitude/latitude with length, width and heading in metres. |
+| `detection.hpp` | The two structs everything passes around. `Det` is a box in tile pixels; `GeoDet` is the same box in longitude/latitude with length, width, and a heading + confidence in degrees/0–1. |
 
 ### GPU work — `kernels.cu` / `kernels.cuh`
 
-One file, nine kernels. This is where nearly all the compute happens.
+Two files, eleven kernels between them. This is where nearly all the compute happens.
 
 | kernel | what it does |
 |---|---|
@@ -73,7 +73,8 @@ One file, nine kernels. This is where nearly all the compute happens.
 | `k_preprocess` | **cuts a 640×640 tile and writes it as the network's input tensor.** Copies pixels 1:1 — it never resizes. That single fact constrains how training data must be made (see §3) |
 | `k_decode` | network output → boxes, drops anything below the confidence threshold, and discards boxes near a tile edge that another overlapping tile will see better |
 | `k_nms_mask` | rotated non-maximum suppression — the same ship seen in two tiles becomes one detection |
-| `k_render_rgb`, `k_overview_rgb`, `k_draw_boxes` | the optional debug pictures |
+| `k_estimate_heading` | one thread per surviving detection: samples the grayscale tile along the box's major/minor axes and picks which end is the bow (dimmer, more water-diluted = tapered) to turn the 0–180 axis into a 0–360 heading. Heuristic, not a measurement — see `pipeline/README.md` |
+| `k_render_rgb`, `k_overview_rgb`, `k_draw_boxes`, `k_draw_arrows` | the optional debug pictures — the last one burns in the heading arrow next to each box |
 
 ### Getting from raw radar to an image
 
