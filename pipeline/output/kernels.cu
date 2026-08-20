@@ -144,13 +144,23 @@ __global__ void k_draw_arrows(uint8_t* __restrict__ rgb, int W, int H,
 
     const float L    = fmaxf(d.w, d.h);
     const float half = L * 0.5f;
-    const float tailLen = fminf(half, L * 0.35f);
-    const float headLen = fmaxf(6.0f, fminf(half * 0.6f, 40.0f));
+
+    // Every length below is in full-res pixels, then multiplied by `scale` at
+    // draw time. On a heavily decimated overview (scale << 1) a small ship's
+    // own length collapses to a sub-pixel sliver post-scale even though it
+    // looked fine here -- floor each length so it still maps to a handful of
+    // screen pixels after scaling, the same reason main.cpp floors box
+    // thickness (std::max(1, cfg.box_thickness / f)) instead of letting it
+    // shrink to zero.
+    const float invScale = 1.0f / fmaxf(scale, 1e-6f);
+    const float tailLen  = fmaxf(fminf(half, L * 0.35f), 4.0f * invScale);
+    const float headLen  = fmaxf(fminf(half * 0.6f, 40.0f), 6.0f * invScale);
+    const float tipExt   = fmaxf(half, 6.0f * invScale);
 
     const float tailX = d.cx - ux * tailLen;
     const float tailY = d.cy - uy * tailLen;
-    const float tipX  = d.cx + ux * (half + headLen * 0.6f);
-    const float tipY  = d.cy + uy * (half + headLen * 0.6f);
+    const float tipX  = d.cx + ux * (tipExt + headLen * 0.6f);
+    const float tipY  = d.cy + uy * (tipExt + headLen * 0.6f);
 
     const int r = max(1, th / 2);
     const uint8_t cr = 255, cg = 255, cb = 0;   // yellow, distinct from the red box
