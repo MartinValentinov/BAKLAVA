@@ -7,7 +7,8 @@ void launch_calibrate(const uint16_t* dn, int ns, int nl,
                       const float* calRows, const int* calIdx, const float* calW,
                       const float* noiseRows, const int* noiIdx, const float* noiW,
                       const float* azNoise, const int* swathOf, int nl_az,
-                      __half* sigma0, int y0, int nRows, cudaStream_t s);
+                      __half* sigma0, int y0, int nRows,
+                      float noiseScale, cudaStream_t s);
 
 struct RdParams {
     int   W, H;

@@ -1,0 +1,125 @@
+diff -ru box.orig/config.cpp box/config.cpp
+--- a/config.cpp	2026-08-20 10:51:00
++++ b/config.cpp	2026-08-20 10:52:13
+@@ -56,6 +56,8 @@
+ "  --overview-max N       longest side of the overview, default 4096\n"
+ "  --jpeg-quality N       default 90\n"
+ "  --box-thickness N      default 5\n"
++"  --box-min-px N         smallest box side in output px, default 12;\n"
++"                         0 draws every box at true scale\n"
+ "\n"
+ "water crops (omit --out-crops to skip all of this):\n"
+ "  --out-crops DIR        write one grayscale JPEG per water crop + manifest\n"
+@@ -121,6 +123,7 @@
+         else if (a == "--coarse-decim")   { c.coarse_decim = std::atoi(need(i)); ++i; }
+         else if (a == "--jpeg-quality")   { c.jpeg_quality = std::atoi(need(i)); ++i; }
+         else if (a == "--box-thickness")  { c.box_thickness = std::atoi(need(i)); ++i; }
++        else if (a == "--box-min-px")     { c.box_min_px = std::atoi(need(i)); ++i; }
+         else if (a == "--workspace-mb")   { c.workspace_mb = std::atoll(need(i)); ++i; }
+         else if (a == "-h" || a == "--help") { usage(argv[0]); std::exit(0); }
+         else { throw std::runtime_error("unknown option " + a); }
+diff -ru box.orig/config.hpp box/config.hpp
+--- a/config.hpp	2026-08-20 10:51:00
++++ b/config.hpp	2026-08-20 10:52:13
+@@ -36,6 +36,7 @@
+ 
+     int  jpeg_quality = 90;
+     int  box_thickness = 5;
++    int  box_min_px = 12;
+ 
+     size_t workspace_mb = 4096;
+ 
+diff -ru box.orig/main.cpp box/main.cpp
+--- a/main.cpp	2026-08-20 10:51:00
++++ b/main.cpp	2026-08-20 10:52:13
+@@ -593,7 +593,8 @@
+             launch_overview_rgb(grayDev, W, H, f, dRGB, ow, oh, 0);
+             if (dSea && cfg.box_thickness > 0)
+                 launch_draw_boxes(dRGB, ow, oh, dSea, int(sea.size()),
+-                                  std::max(1, cfg.box_thickness / f), 1.0f / float(f), 0);
++                                  std::max(1, cfg.box_thickness / f), 1.0f / float(f),
++                                  float(cfg.box_min_px), 0);
+             CUDA_CHECK(cudaDeviceSynchronize());
+ 
+             std::vector<uint8_t> host(size_t(ow) * oh * 3);
+@@ -620,7 +621,8 @@
+             launch_render_rgb(grayDev, W, H, dRGB, 0);
+             if (dSea && cfg.box_thickness > 0)
+                 launch_draw_boxes(dRGB, W, H, dSea, int(sea.size()),
+-                                  cfg.box_thickness, 1.0f, 0);
++                                  cfg.box_thickness, 1.0f,
++                                  float(cfg.box_min_px), 0);
+             CUDA_CHECK(cudaDeviceSynchronize());
+             encodeJpegRGB(dRGB, W, H, cfg.jpeg_quality, cfg.out_jpg, 0);
+             CUDA_CHECK(cudaFree(dRGB));
+diff -ru box.orig/output/kernels.cu box/output/kernels.cu
+--- a/output/kernels.cu	2026-08-20 10:51:00
++++ b/output/kernels.cu	2026-08-20 10:52:13
+@@ -47,29 +47,37 @@
+ 
+ struct Pt { float x, y; };
+ 
+-__device__ __forceinline__ void rbox_corners(const Det& d, Pt* c) {
++__device__ __forceinline__ void rbox_corners(const Det& d, float scale,
++                                             float minPx, Pt* c) {
+     const float ca = __cosf(d.angle), sa = __sinf(d.angle);
+-    const float hw = d.w * 0.5f, hh = d.h * 0.5f;
++    float hw = d.w * 0.5f * scale, hh = d.h * 0.5f * scale;
++
++    const float half = minPx * 0.5f;
++    const float big = fmaxf(hw, hh);
++    if (big < half) {
++        if (big > 1e-6f) { const float k = half / big; hw *= k; hh *= k; }
++        else             { hw = half; hh = half; }
++    }
++
++    const float cx = d.cx * scale, cy = d.cy * scale;
+     const float ox[4] = {-hw,  hw, hw, -hw};
+     const float oy[4] = {-hh, -hh, hh,  hh};
+ #pragma unroll
+     for (int i = 0; i < 4; ++i) {
+-        c[i].x = d.cx + ox[i] * ca - oy[i] * sa;
+-        c[i].y = d.cy + ox[i] * sa + oy[i] * ca;
++        c[i].x = cx + ox[i] * ca - oy[i] * sa;
++        c[i].y = cy + ox[i] * sa + oy[i] * ca;
+     }
+ }
+ 
+ __global__ void k_draw_boxes(uint8_t* __restrict__ rgb, int W, int H,
+                              const Det* __restrict__ dets, int n, int th,
+-                             float scale) {
++                             float scale, float minPx) {
+     const int id = blockIdx.x * blockDim.x + threadIdx.x;
+     if (id >= n * 4) return;
+     const int di = id / 4, ei = id % 4;
+ 
+     Pt c[4];
+-    rbox_corners(dets[di], c);
+-#pragma unroll
+-    for (int i = 0; i < 4; ++i) { c[i].x *= scale; c[i].y *= scale; }
++    rbox_corners(dets[di], scale, minPx, c);
+     const Pt a = c[ei], b = c[(ei + 1) & 3];
+ 
+     const float dx = b.x - a.x, dy = b.y - a.y;
+@@ -96,9 +104,10 @@
+ 
+ void launch_draw_boxes(uint8_t* rgb, int W, int H,
+                        const Det* dets, int n, int thickness, float scale,
+-                       cudaStream_t s) {
++                       float min_px, cudaStream_t s) {
+     if (n <= 0) return;
+     const int threads = 128;
+     k_draw_boxes<<<CDIV(n * 4, threads), threads, 0, s>>>(rgb, W, H, dets, n,
+-                                                          thickness, scale);
++                                                          thickness, scale,
++                                                          min_px);
+ }
+diff -ru box.orig/output/kernels.cuh box/output/kernels.cuh
+--- a/output/kernels.cuh	2026-08-20 10:51:00
++++ b/output/kernels.cuh	2026-08-20 10:52:13
+@@ -11,4 +11,4 @@
+ 
+ void launch_draw_boxes(uint8_t* rgb, int W, int H,
+                        const Det* dets, int n, int thickness, float scale,
+-                       cudaStream_t s);
++                       float min_px, cudaStream_t s);

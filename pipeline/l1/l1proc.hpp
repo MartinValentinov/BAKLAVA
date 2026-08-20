@@ -16,6 +16,7 @@ struct L1Config {
     int    epsg = 0;
     int    coarse_step = 64;
     bool   no_geoid_ok = false;
+    float  noise_scale = 1.0f;
 };
 
 struct L1Quant {

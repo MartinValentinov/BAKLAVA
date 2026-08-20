@@ -41,6 +41,7 @@ void Config::usage(const char* prog) {
 "\n"
 "detection:\n"
 "  --conf F               default 0.50\n"
+"  --noise-scale F        thermal-noise subtraction multiplier, default 1.0\n"
 "  --nms-iou F            rotated IoU, default 0.30\n"
 "  --max-det N            default 8192\n"
 "\n"
@@ -84,6 +85,7 @@ Config Config::parse(int argc, char** argv) {
         if      (a == "--tif")            { c.tif = need(i); ++i; }
         else if (a == "--safe")           { c.l1.safe = need(i); ++i; }
         else if (a == "--pol")            { c.l1.pol = need(i); ++i; }
+        else if (a == "--noise-scale")    { c.l1.noise_scale = std::atof(need(i)); ++i; }
         else if (a == "--dem")            { c.l1.dem = need(i); ++i; }
         else if (a == "--geoid")          { c.l1.geoid = need(i); ++i; }
         else if (a == "--dem-is-ellipsoidal") { c.l1.no_geoid_ok = true; }

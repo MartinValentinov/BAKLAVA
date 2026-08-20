@@ -1,0 +1,80 @@
+--- main.cpp.orig	2026-08-20 10:24:09
++++ main.cpp	2026-08-20 10:25:18
+@@ -27,6 +27,7 @@
+ #include <cmath>
+ #include <filesystem>
+ #include <fstream>
++#include <functional>
+ #include <future>
+ #include <numeric>
+ #include <vector>
+@@ -67,7 +68,8 @@
+ 
+ }
+ 
+-static int runOnce(const Config& cfg) {
++static int runOnce(const Config& cfg,
++                   const std::function<void()>& onAnswerReady = {}) {
+     Timer tTotal("TOTAL");
+ 
+     Scene scene;
+@@ -565,6 +567,11 @@
+     }
+ 
+     tHot.report();
++
++    if (onAnswerReady) {
++        std::fprintf(stderr, "[time] %-28s %8.1f ms\n", "ANSWER READY", tTotal.ms());
++        onAnswerReady();
++    }
+ 
+     if (fCrops.valid()) {
+         Timer t("crop join + manifest");
+@@ -746,13 +753,28 @@
+         g_replied.store(false);
+         g_jobActive.store(true);
+         writeStats("busy", jobs, lastRc, lastMs, startedAt);
++
++        bool logDetached = false;
++        auto detachLog = [&]() {
++            if (logDetached) return;
++            logDetached = true;
++            std::fflush(stdout);
++            std::fflush(stderr);
++            if (lf >= 0) { ::dup2(so, 1); ::dup2(se, 2); ::close(lf); }
++            ::close(so); ::close(se);
++        };
+ 
+         int rc = 1;
+         bool recycle = false;
++        bool answered = false;
+         Timer tJob("job");
+         try {
+             Config cfg = Config::parse(int(argv.size()), argv.data());
+-            rc = runOnce(cfg);
++            rc = runOnce(cfg, [&]() {
++                answered = true;
++                detachLog();
++                replyOnce(0, 10);
++            });
+         } catch (const std::exception& e) {
+             std::fprintf(stderr, "[serve] job threw: %s\n", e.what());
+             recycle = true;
+@@ -761,11 +783,13 @@
+             recycle = true;
+         }
+         lastMs = tJob.ms();
+-        std::fflush(stdout);
+-        std::fflush(stderr);
+-        if (lf >= 0) { ::dup2(so, 1); ::dup2(se, 2); ::close(lf); }
+-        ::close(so); ::close(se);
++        detachLog();
+ 
++        if (answered && rc != 0)
++            std::fprintf(stderr, "[serve] detections were delivered as rc0, but the "
++                                 "post-answer stage failed (rc %d); the json is complete "
++                                 "and the overview/render may be missing or stale\n", rc);
++
+         replyOnce(rc, 10);
+         g_jobActive.store(false);
+         ++jobs;

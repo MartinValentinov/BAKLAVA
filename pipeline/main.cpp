@@ -370,22 +370,28 @@ static int runOnce(const Config& cfg) {
         });
     }
 
-    const int lanes = std::max(1, cfg.streams);
-    if (!eng->createContexts(lanes)) FATAL("could not create %d TRT contexts", lanes);
-
-    std::vector<StreamCtx> lane(lanes);
-    for (int i = 0; i < lanes; ++i) {
-        CUDA_CHECK(cudaStreamCreateWithFlags(&lane[i].stream, cudaStreamNonBlocking));
-        CUDA_CHECK(cudaMalloc(&lane[i].dIn,  eng->inputElems()  * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&lane[i].dOut, eng->outputElems() * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&lane[i].dOrig, size_t(B) * sizeof(int2)));
-    }
-
+    int lanes = 0;
+    std::vector<StreamCtx> lane;
     Det* dDets = nullptr;
     int* dCount = nullptr;
-    CUDA_CHECK(cudaMalloc(&dDets, size_t(cfg.max_det) * sizeof(Det)));
-    CUDA_CHECK(cudaMalloc(&dCount, sizeof(int)));
-    CUDA_CHECK(cudaMemset(dCount, 0, sizeof(int)));
+    {
+        Timer t("stream+lane setup");
+        lanes = std::max(1, cfg.streams);
+        if (!eng->createContexts(lanes)) FATAL("could not create %d TRT contexts", lanes);
+
+        lane.resize(lanes);
+        for (int i = 0; i < lanes; ++i) {
+            CUDA_CHECK(cudaStreamCreateWithFlags(&lane[i].stream, cudaStreamNonBlocking));
+            CUDA_CHECK(cudaMalloc(&lane[i].dIn,  eng->inputElems()  * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&lane[i].dOut, eng->outputElems() * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&lane[i].dOrig, size_t(B) * sizeof(int2)));
+        }
+
+        CUDA_CHECK(cudaMalloc(&dDets, size_t(cfg.max_det) * sizeof(Det)));
+        CUDA_CHECK(cudaMalloc(&dCount, sizeof(int)));
+        CUDA_CHECK(cudaMemset(dCount, 0, sizeof(int)));
+        t.report();
+    }
 
     {
         Timer t("inference");

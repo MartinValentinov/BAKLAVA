@@ -10,7 +10,8 @@ __global__ void k_calibrate(const uint16_t* __restrict__ dn, int ns, int nl,
                             const float* __restrict__ noiW,
                             const float* __restrict__ azNoise,
                             const int* __restrict__ swathOf,
-                            __half* __restrict__ sigma0, int y0, int nRows) {
+                            __half* __restrict__ sigma0, int y0, int nRows,
+                            float noiseScale) {
     for (int y = y0 + blockIdx.y; y < y0 + nRows; y += gridDim.y) {
         const size_t row = size_t(y) * ns;
         const int   ci = calIdx[y];  const float cwgt = calW[y];
@@ -35,7 +36,7 @@ __global__ void k_calibrate(const uint16_t* __restrict__ dn, int ns, int nl,
             }
 
             const float d = float(dn[row + x]);
-            const float p = fmaf(d, d, -noise);
+            const float p = fmaf(d, d, -noise * noiseScale);
             const float sig = (p > 0.0f && cal > 0.0f) ? p / (cal * cal) : 0.0f;
             sigma0[row + x] = __float2half(fminf(sig, 60000.0f));
         }
@@ -46,14 +47,15 @@ void launch_calibrate(const uint16_t* dn, int ns, int nl,
                       const float* calRows, const int* calIdx, const float* calW,
                       const float* noiseRows, const int* noiIdx, const float* noiW,
                       const float* azNoise, const int* swathOf, int nl_az,
-                      __half* sigma0, int y0, int nRows, cudaStream_t s) {
+                      __half* sigma0, int y0, int nRows,
+                      float noiseScale, cudaStream_t s) {
     (void)nl_az;
     if (nRows <= 0) return;
 
     dim3 grid((ns + 255) / 256, nRows);
     k_calibrate<<<grid, 256, 0, s>>>(dn, ns, nl, calRows, calIdx, calW,
                                      noiseRows, noiIdx, noiW, azNoise, swathOf,
-                                     sigma0, y0, nRows);
+                                     sigma0, y0, nRows, noiseScale);
 }
 
 __device__ __forceinline__ float3 f3(float a, float b, float c) {

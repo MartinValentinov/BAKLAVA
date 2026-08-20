@@ -402,7 +402,7 @@ bool runL1ToL2(const L1Config& cfg, Scene& scene,
         if (e == CE_None)
             launch_calibrate(dnDev, sp.ns, sp.nl, dCal, dCalI, dCalW,
                              dNoi, dNoiI, dNoiW, dAz, dSw, sp.nl, dSigma,
-                             0, sp.nl, st);
+                             0, sp.nl, cfg.noise_scale, st);
         GDALClose(ds);
         CUDA_CHECK(cudaStreamSynchronize(st));
         CUDA_CHECK(cudaStreamDestroy(st));

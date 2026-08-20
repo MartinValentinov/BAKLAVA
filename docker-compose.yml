@@ -1,6 +1,6 @@
 services:
   sar-ship-detect:
-    image: sar-ship-detect:latest
+    image: baklava-ship-detect:latest
     build:
       context: pipeline
       dockerfile: docker/Dockerfile

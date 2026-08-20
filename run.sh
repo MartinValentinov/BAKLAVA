@@ -9,7 +9,7 @@
 set -euo pipefail
 
 PROJ=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-IMAGE=${IMAGE:-sar-ship-detect:latest}
+IMAGE=${IMAGE:-baklava-ship-detect:latest}
 DATA="$PROJ/data"
 ONNX_NAME=${ONNX_NAME:-model_b16_640.onnx}
 ENGINE_NAME=${ENGINE_NAME:-model_b16_640.container.engine}
@@ -18,6 +18,28 @@ GEOID_NAME=${GEOID_NAME:-egm96.tif}
 OVERVIEW_MAX=${OVERVIEW_MAX:-4096}
 BOX_THICKNESS=${BOX_THICKNESS:-0}
 CFAR_THRESH=${CFAR_THRESH:-50}
+# Measured on the Bosphorus/Marmara scene (S1D ...155853), which has real
+# 30+ ship anchorages 240-1000 m off the beach.
+#
+# What was ruled out first, with numbers, because each looked like the obvious
+# culprit and none of them was:
+#   CFAR      --cfar 0 infers 386 tiles instead of 314 and yields the SAME 412
+#             detections. The tiles it skips are genuinely empty.
+#   land mask --buffer-m 0 moves exactly one tile out of "fully land" (980->979).
+#   NMS       raising --nms-iou 0.30->0.75 adds 96 boxes, but 140 of them then
+#             sit within 30 m of a neighbour: duplicate boxes on one hull, not
+#             extra ships. At 0.30 that count is 0. NMS is doing its job.
+#
+# What it actually is: coastal vessels are smaller (median 142 m within 500 m of
+# shore vs 243 m offshore), the network is less certain about small targets, and
+# a global confidence gate tuned on open water cuts them. The 49 near-shore
+# detections in the 0.05-0.40 band have ZERO neighbours within 60 m and a median
+# length of 175 m -- distinct, ship-sized, and real.
+#
+# 0.30 is where the trade stops paying: +31 ships for +4 land-clutter drops
+# (7.8:1). At 0.25 that is 1.8:1 and at 0.20 it inverts to 0.8:1.
+# Near-shore recovery at 0.30: 38->46 within 500 m, 83->99 within 1 km.
+CONF_THRESH=${CONF_THRESH:-0.30}
 
 TTY=()
 [[ -t 0 && -t 1 ]] && TTY=(-it)
@@ -227,6 +249,12 @@ case "$cmd" in
     (( want_render ))   && extra+=(--out-jpg "$SCENE_OUT/${stem}.jpg")
     (( want_overview )) && extra+=(--out-overview "$SCENE_OUT/${stem}_overview.jpg" --overview-max "$OVERVIEW_MAX" --box-thickness "$BOX_THICKNESS")
     (( CFAR_THRESH > 0 )) && extra+=(--cfar "$CFAR_THRESH")
+    # Only inject the default if the caller did not pass their own --conf --
+    # an explicit flag on the command line must win, not be silently
+    # overwritten by a later occurrence in argv.
+    has_conf=0
+    for a in "${extra[@]}"; do [[ "$a" == "--conf" ]] && has_conf=1; done
+    (( has_conf )) || extra+=(--conf "$CONF_THRESH")
     (( want_crops ))    && extra+=(--out-crops "$SCENE_OUT/${stem}_crops")
     (( want_l2 ))       && extra+=(--out-l2 "$SCENE_OUT/${stem}_L2.tif")
 

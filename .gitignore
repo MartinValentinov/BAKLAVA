@@ -23,3 +23,4 @@ miniconda3/
 *.SAFE
 *.backup/
 *.serve/
+*.log
