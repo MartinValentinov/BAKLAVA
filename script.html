@@ -1,0 +1,406 @@
+<title>Walkthrough Run Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ground:   #12160F;
+    --surface:  #1B2117;
+    --raised:   #232B1E;
+    --line:     #333D2C;
+    --ink:      #F1F2EC;
+    --ink-soft: #A8B09E;
+    --ink-dim:  #77806D;
+    --sand:     #FFD29D;
+    --olive:    #A79A62;
+    --alert:    #E4635A;
+
+    --display: "Space Grotesk", "Segoe UI", sans-serif;
+    --body:    "IBM Plex Sans", "Segoe UI", sans-serif;
+    --mono:    "IBM Plex Mono", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 56px 26px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  .masthead { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--olive);
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--ink-soft);
+    font-size: 18px;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 15px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--olive);
+    margin: 0 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px 26px;
+  }
+
+  .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+  .checks li {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 12px;
+    align-items: start;
+    color: var(--ink-soft);
+  }
+
+  .checks b { color: var(--ink); font-weight: 600; }
+
+  .box {
+    width: 15px; height: 15px;
+    margin-top: 5px;
+    border: 1.5px solid var(--olive);
+    border-radius: 2px;
+  }
+
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+
+  code {
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 6px;
+    color: var(--sand);
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 2px; }
+
+  .step {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 22px;
+    padding: 26px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .step:last-child { border-bottom: 1px solid var(--line); }
+
+  .num {
+    font-family: var(--mono);
+    font-size: 26px;
+    color: var(--ink-dim);
+    line-height: 1;
+    padding-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step h3 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 25px;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+
+  .screen {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--olive);
+    margin: 0 0 16px;
+  }
+
+  .say {
+    margin: 0;
+    padding-left: 18px;
+    border-left: 2px solid var(--sand);
+    max-width: 62ch;
+    font-size: 17.5px;
+  }
+
+  .say + .say { margin-top: 12px; }
+
+  .beat {
+    display: inline-block;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--sand);
+    background: rgba(255, 210, 157, 0.09);
+    border: 1px solid rgba(255, 210, 157, 0.28);
+    border-radius: 3px;
+    padding: 5px 11px;
+  }
+
+  .beat.is-quiet { color: var(--ink-soft); background: transparent; border-color: var(--line); }
+
+  .qa { display: flex; flex-direction: column; gap: 22px; }
+
+  .qa div { display: flex; flex-direction: column; gap: 7px; }
+
+  .q { font-family: var(--display); font-weight: 500; font-size: 18px; color: var(--sand); margin: 0; }
+
+  .a { margin: 0; color: var(--ink-soft); max-width: 64ch; }
+
+  .warn {
+    border-left: 3px solid var(--alert);
+    background: rgba(228, 99, 90, 0.07);
+    padding: 16px 20px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .warn p { margin: 0; color: var(--ink-soft); max-width: 64ch; }
+  .warn strong { color: var(--ink); }
+
+  .close { color: var(--ink-soft); max-width: 62ch; margin: 0; }
+
+  @media (max-width: 620px) {
+    .step { grid-template-columns: 1fr; gap: 8px; }
+    .num { font-size: 15px; padding-top: 0; }
+    body { font-size: 16px; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <span class="eyebrow">BAKLAVA · pipeline walkthrough</span>
+    <h1>Walkthrough Run Sheet</h1>
+    <p class="standfirst">Eleven steps, about eight minutes. Numbers below are from the Bosphorus scene — 443 vessels, the busiest one you have. Whatever scene you pick, quote what is on screen, not what is here.</p>
+  </header>
+
+  <section>
+    <h2>Before you start</h2>
+    <div class="panel">
+      <ul class="checks">
+        <li><span class="box"></span><span><b>Backend up.</b> <code>cd baklava_app/backend &amp;&amp; dotnet run</code> — it needs the Development environment or it refuses to boot.</span></li>
+        <li><span class="box"></span><span><b>Demo up.</b> <code>cd baklava_demo &amp;&amp; python3 app.py</code>, then open <code>127.0.0.1:5001</code>. Not <code>localhost:5000</code> — AirPlay owns that port on your Mac.</span></li>
+        <li><span class="box"></span><span><b>Check the scene list.</b> The catalog changes. If the Bosphorus scene is missing, process it first or rehearse your numbers on whatever is there.</span></li>
+        <li><span class="box"></span><span><b>Press Start and step to 11 once</b>, before anyone is watching. It warms the tile cache and the coastline file so nothing loads mid-sentence.</span></li>
+        <li><span class="box"></span><span><b>Then Restart</b> and leave it on the scene picker.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>The walkthrough</h2>
+    <div class="steps">
+
+      <article class="step">
+        <div class="num">01</div>
+        <div>
+          <h3>Read the scene</h3>
+          <p class="screen">Footprint outline · raw radar image inset · 44 ms</p>
+          <p class="say">This is what the satellite actually delivers. Not an image — a folder. Inside it are the orbit state vectors, the pulse timing, and the tables that say where on the ground each radar echo came from.</p>
+          <p class="say">The picture in the corner is the raw radar band. Twenty-six thousand pixels across. Notice it is a plain rectangle, and it does not line up with the map at all. Fixing that is most of what the next few steps do.</p>
+          <span class="beat">Point at the inset. It is the whole reason geocoding exists.</span>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">02</div>
+        <div>
+          <h3>Lay out the output grid</h3>
+          <p class="screen">Footprint · 25 ms</p>
+          <p class="say">Before anything else we decide what the finished map looks like: a north-up UTM raster, ten metres a pixel, sized from the scene corners with a kilometre of margin.</p>
+          <span class="beat is-quiet">Fast step. Keep moving.</span>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">03</div>
+        <div>
+          <h3>Load the terrain model</h3>
+          <p class="screen">Footprint · 228 ms</p>
+          <p class="say">Radar has to know the shape of the ground. A hill leans towards the satellite, and if you do not correct for its height it lands in the wrong place on your map.</p>
+          <p class="say">There is a second correction underneath that one. Elevation models measure height above sea level, but the orbit is computed against a mathematical ellipsoid, and the two disagree by about thirty-eight metres here. Skip it and everything shifts by roughly four pixels.</p>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">04</div>
+        <div>
+          <h3>Calibrate the radar</h3>
+          <p class="screen">Footprint · 470 ms</p>
+          <p class="say">Now the heavy read. Eight hundred and eighty-six megabytes of radar data, converted from raw detector counts into actual backscatter, so the same ship looks the same whether it sits at the near edge of the swath or the far edge.</p>
+          <span class="beat">This is the single most expensive read in the pipeline.</span>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">05</div>
+        <div>
+          <h3>Load the network</h3>
+          <p class="screen">Footprint · 201 ms · runs in parallel</p>
+          <p class="say">While that read is happening, another thread loads the neural network. Two hundred milliseconds — and they cost nothing, because the radar read is still going and takes longer.</p>
+          <p class="say">Same for the elevation model two steps back. This pipeline does about three seconds of work in under two, and this is where that comes from.</p>
+          <span class="beat">First mention of overlap. Set it up here, land it at step 11.</span>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">06</div>
+        <div>
+          <h3>Geocode</h3>
+          <p class="screen">SAR image appears, corner-pinned to the swath · 347 ms</p>
+          <p class="say">And there it is. For every pixel of that output grid we solve the radar equations backwards — which radar sample landed here? — and the lopsided rectangle from step one becomes something you can lay on a map.</p>
+          <p class="say">It sits at an angle because the satellite does not fly north to south. That parallelogram is the actual ground the radar swept.</p>
+          <span class="beat">Biggest visual moment in the demo. Pause and let people look.</span>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">07</div>
+        <div>
+          <h3>Build the land mask</h3>
+          <p class="screen">Coastline fills red inside the swath · 705 ms · runs in parallel</p>
+          <p class="say">Everything red is excluded before we start looking. Piers, cranes, breakwaters — to a radar they are bright, hard-edged and exactly ship-shaped. Without this you find a hundred ships in a container terminal.</p>
+          <p class="say">This one is seven hundred milliseconds and it is also free. It finishes underneath the geocoding with about forty milliseconds to spare.</p>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">08</div>
+        <div>
+          <h3>Look for candidates</h3>
+          <p class="screen">SAR image · 65 ms</p>
+          <p class="say">Now we decide what the network is even allowed to see. Each cell is compared against its own local background, so a bright spot only counts if it is bright for where it is — which matters, because open sea in a swell is not as dark as open sea on a calm day.</p>
+          <p class="say">Combine that with the land mask and two thousand tiles become three hundred. Eighty-five per cent of this scene never reaches the GPU, and it costs sixty-five milliseconds to work that out.</p>
+          <span class="beat">Best cost-versus-benefit number in the whole pipeline.</span>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">09</div>
+        <div>
+          <h3>Detect</h3>
+          <p class="screen">Contacts appear as oriented boxes · 689 ms</p>
+          <p class="say">This is the part everyone calls the AI, and it is the single most expensive step — about two thirds of a second.</p>
+          <p class="say">Sixteen tiles at a time, across two CUDA streams. The boxes are rotated, not square, so each vessel's heading falls straight out of the geometry rather than being computed afterwards.</p>
+          <p class="say">Worth saying plainly: the GPU is pinned at ninety-nine per cent for this entire stage, at full clock. This is the floor for this model on this hardware. We measured it.</p>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">10</div>
+        <div>
+          <h3>Clean up detections</h3>
+          <p class="screen">Boxes recolour, counts appear · 7 ms</p>
+          <p class="say">The tiles overlap, so the same hull gets found more than once. Rotated non-maximum suppression merges the duplicates, and then anything on land or within a hundred metres of shore is dropped.</p>
+          <p class="say">Nineteen hundred raw boxes become four hundred and forty-three vessels. Seven milliseconds for both steps.</p>
+        </div>
+      </article>
+
+      <article class="step">
+        <div class="num">11</div>
+        <div>
+          <h3>Cross-reference</h3>
+          <p class="screen">443 contacts, 435 dark · 202 ms</p>
+          <p class="say">Last step. Positions, lengths and headings go out as JSON, and every contact is checked against the AIS broadcast feed. Anything with no matching transmission is flagged dark.</p>
+          <p class="say">Four hundred and forty-three vessels. Total time, one point eight six seconds, on a board that draws about the same power as a lightbulb — and remember, that is three seconds of work, because two of those steps were free.</p>
+          <span class="beat">The closing number. Say it slowly.</span>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Watch out for</h2>
+    <div class="warn">
+      <p><strong>The elapsed clock currently overstates.</strong> The <code>parallel</code> flags were removed from the step definitions, so steps 3, 5 and 7 are being added to the running total even though that work overlaps. On the Bosphorus scene the clock will read about 3.25 s at the end, where the detector's own reported total is 1.86 s. If anyone is reading the number off the screen, that gap is visible. Adding <code>"parallel": "…"</code> back to those three steps in <code>app.py</code> fixes it, and re-enables the "this step is free" line — which is the best point in the talk.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>If they ask</h2>
+    <div class="qa">
+
+      <div>
+        <p class="q">Is this running live?</p>
+        <p class="a">The data is. Every millisecond, every vessel position and the imagery come from the backend when you press Start, and there is a checkbox to reprocess on the Jetson first. The pacing is not — the detector finishes in under two seconds and cannot be paused between stages without rebuilding it. So this is a real run, presented at human speed.</p>
+      </div>
+
+      <div>
+        <p class="q">Why is the AI only two thirds of a second?</p>
+        <p class="a">Because it only looks at fifteen per cent of the scene. The CFAR screen and the land mask do the rest, and they cost sixty-five milliseconds together. Most of the speed in this pipeline is in what we decline to compute.</p>
+      </div>
+
+      <div>
+        <p class="q">Can you make it faster?</p>
+        <p class="a">Not the detection part. The GPU is saturated at full clock for the whole inference stage — we sampled the load counter to check. Rebuilding the engine on-device made it nine per cent slower, and more CUDA streams made it worse. INT8 would buy roughly three hundred milliseconds but it trades precision exactly where the model is weakest, on small coastal vessels. The remaining headroom is in the reading and geocoding, not the network.</p>
+      </div>
+
+      <div>
+        <p class="q">How accurate is it?</p>
+        <p class="a">On this scene, 443 contacts. Be straight about the failure mode: small vessels close to shore are the weak class, because the confidence threshold is tuned on open water. Raising the CFAR threshold to save two hundred and fifty milliseconds costs three real ships, one of them a confident 352-metre vessel — which is why we did not do it.</p>
+      </div>
+
+      <div>
+        <p class="q">What is a dark vessel?</p>
+        <p class="a">A contact the radar found with no matching AIS broadcast. It is not automatically suspicious — small craft are not required to transmit, and receivers miss messages — but it is the set worth looking at.</p>
+      </div>
+
+      <div>
+        <p class="q">Why does the land mask only cover part of the map?</p>
+        <p class="a">It is clipped to the swath, because that is the only ground this scene actually covers. The coastline data is regional; the mask is per-scene.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Driving it</h2>
+    <div class="panel">
+      <p class="close">Space, right arrow or page down to advance — a presenter remote sends page up and page down, so it works without touching the laptop. Click any chip in the bottom rail to jump. Autoplay advances every six seconds and fills the button as it counts, so you can see it running. If someone asks a question mid-flow, hit the rail chip to go back; the map state follows the step, not the click order.</p>
+    </div>
+  </section>
+
+</div>

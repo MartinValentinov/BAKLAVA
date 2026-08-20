@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ settings.project_title }} - {{ settings.demo_title }}</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/demo.css') }}">
+</head>
+
+<body class="demo">
+
+<header class="demo-top">
+    <div class="brand">
+        <div class="brand__logo-box">
+            <img class="brand__logo-img"
+                 src="{{ url_for('static', filename=settings.logo_path) }}"
+                 alt="" onerror="this.style.display='none'">
+        </div>
+        <div class="brand__text-box">
+            <h1 class="brand__title">{{ settings.project_title }}</h1>
+            <p class="brand__subtitle">{{ settings.demo_title }}</p>
+        </div>
+    </div>
+
+    <div class="demo-top__right">
+        <span class="demo-scene" id="demoSceneLabel"></span>
+        <button class="demo-restart" id="btnRestart" hidden>Restart</button>
+
+        <a class="demo-close" href="{{ settings.link_main }}"
+           title="Back to the map" aria-label="Back to the map">&times;</a>
+    </div>
+</header>
+
+<main class="demo-stage">
+    <div class="demo-map-wrap">
+        <div id="map" class="demo-map"></div>
+
+        <figure class="demo-inset is-hidden" id="demoInset">
+            <img class="demo-inset__img" id="demoInsetImg" alt="">
+            <figcaption class="demo-inset__cap" id="demoInsetCap"></figcaption>
+        </figure>
+
+        <div class="demo-stats is-hidden" id="demoStats">
+            <span class="demo-stats__item">
+                Contacts <b id="statTotal">0</b>
+            </span>
+            <span class="demo-stats__item is-dark">
+                Dark <b id="statDark">0</b>
+            </span>
+        </div>
+    </div>
+
+    <aside class="demo-panel" id="demoPanel">
+        <div class="demo-panel__index">
+            <span id="stepIndex">1</span><span class="demo-panel__of">/</span><span id="stepCount">11</span>
+        </div>
+
+        <h2 class="demo-panel__title" id="stepTitle"></h2>
+        <p class="demo-panel__lead" id="stepLead"></p>
+        <p class="demo-panel__body" id="stepBody"></p>
+
+        <p class="demo-badge is-hidden" id="stepParallel"></p>
+        <p class="demo-panel__fact" id="stepFact"></p>
+
+        <div class="demo-panel__spacer"></div>
+
+        <div class="demo-clock">
+            <div class="demo-clock__row">
+                <span class="demo-clock__label">This step</span>
+                <span class="demo-clock__value" id="stepMs">-</span>
+            </div>
+            <div class="demo-clock__row is-muted">
+                <span class="demo-clock__label">Elapsed</span>
+                <span class="demo-clock__value" id="stepCum">-</span>
+            </div>
+            <p class="demo-clock__note is-hidden" id="stepFree">this step is free, it overlaps another</p>
+            <ul class="demo-substages" id="stepStages"></ul>
+        </div>
+    </aside>
+</main>
+
+<footer class="demo-rail">
+    <ol class="demo-rail__steps" id="railSteps"></ol>
+
+    <div class="demo-controls">
+        <button class="demo-btn" id="btnPrev" aria-label="Previous step">&larr;</button>
+        <button class="demo-btn is-primary" id="btnNext" aria-label="Next step">Next &rarr;</button>
+        <button class="demo-btn is-ghost" id="btnAuto" aria-pressed="false">
+            <span class="demo-btn__fill" id="autoFill"></span>
+            <span class="demo-btn__label">Autoplay</span>
+        </button>
+    </div>
+</footer>
+
+<div class="demo-start" id="demoStart">
+    <div class="demo-start__card">
+        <a class="demo-start__close" href="{{ settings.link_main }}"
+           title="Back to the map" aria-label="Back to the map">&times;</a>
+
+        <h2 class="demo-start__title">{{ settings.demo_title }}</h2>
+        <p class="demo-start__sub" id="startSub">Loading scenes from the backend...</p>
+
+        <div class="demo-start__list" id="startList"></div>
+
+        <button class="demo-btn is-primary is-big" id="btnStart" disabled>Start</button>
+        <p class="demo-start__hint">Arrow keys or space to move between steps</p>
+    </div>
+</div>
+
+<div class="demo-busy is-hidden" id="demoBusy">
+    <img class="demo-busy__anim"
+         src="{{ url_for('static', filename=settings.loading_animation_path) }}"
+         alt="" onerror="this.style.display='none'">
+    <p class="demo-busy__text" id="demoBusyText">Working...</p>
+</div>
+
+<script id="baklava-settings" type="application/json">{{ settings | tojson }}</script>
+<script>
+    const BAKLAVA_SETTINGS = JSON.parse(
+        document.getElementById('baklava-settings').textContent
+    );
+</script>
+<script src="{{ url_for('static', filename='js/demo.js') }}"></script>
+
+</body>
+</html>
