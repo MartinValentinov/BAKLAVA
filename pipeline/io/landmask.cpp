@@ -59,6 +59,12 @@ bool LandMask::build(const std::vector<std::string>& shp, const Scene& scene,
     OGRPolygon clipRect;
     clipRect.addRing(&ring);
 
+    OGRLinearRing ringWgs;
+    ringWgs.addPoint(wminx, wminy); ringWgs.addPoint(wmaxx, wminy);
+    ringWgs.addPoint(wmaxx, wmaxy); ringWgs.addPoint(wminx, wmaxy); ringWgs.addPoint(wminx, wminy);
+    OGRPolygon clipRectWgs;
+    clipRectWgs.addRing(&ringWgs);
+
     for (const auto& path : shp) {
         GDALDataset* ds = static_cast<GDALDataset*>(
             GDALOpenEx(path.c_str(), GDAL_OF_VECTOR | GDAL_OF_READONLY,
@@ -84,11 +90,23 @@ bool LandMask::build(const std::vector<std::string>& shp, const Scene& scene,
         while ((f = layer->GetNextFeature()) != nullptr) {
             OGRGeometry* g = f->GetGeometryRef();
             if (g) {
-                OGRGeometry* c = g->clone();
-                if (toScene) c->transform(toScene);
+                OGRGeometry* cWgs = g->Intersection(&clipRectWgs);
+                if (!cWgs || cWgs->IsEmpty()) {
+                    if (cWgs) OGRGeometryFactory::destroyGeometry(cWgs);
+                    OGRFeature::DestroyFeature(f);
+                    continue;
+                }
 
-                OGRGeometry* clipped = c->Intersection(&clipRect);
-                OGRGeometryFactory::destroyGeometry(c);
+                if (toScene && cWgs->transform(toScene) != OGRERR_NONE) {
+                    std::fprintf(stderr, "[land] reprojection failed for feature %lld, skipping\n",
+                                 static_cast<long long>(f->GetFID()));
+                    OGRGeometryFactory::destroyGeometry(cWgs);
+                    OGRFeature::DestroyFeature(f);
+                    continue;
+                }
+
+                OGRGeometry* clipped = cWgs->Intersection(&clipRect);
+                OGRGeometryFactory::destroyGeometry(cWgs);
 
                 if (clipped && !clipped->IsEmpty()) {
                     OGRGeometry* buf = (buffer_m > 0.0)
